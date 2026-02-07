@@ -89,6 +89,10 @@ def _parse_pdf_paystub(pdf_base64: str, api_key: str) -> dict:
 
     pdf_text = "\n\n--- Page Break ---\n\n".join(all_text)
 
+    # Strip "Company Contributions" section — these are employer-paid
+    # and don't come out of the employee's gross pay
+    pdf_text = _strip_company_contributions(pdf_text)
+
     if not pdf_text or len(pdf_text.strip()) < 50:
         raise ValueError(
             "Could not extract readable text from this PDF. "
@@ -104,6 +108,27 @@ def _parse_image_paystub(image_base64: str, ext: str, api_key: str) -> dict:
     """Extract paystub data from an image via GPT-4o vision."""
     mime = IMAGE_MIMES[ext]
     return _extract_from_image(api_key, image_base64, mime)
+
+
+def _strip_company_contributions(text: str) -> str:
+    """Remove 'Company Contributions' section from paystub text.
+
+    Company contributions (employer match, employer HSA deposit, etc.)
+    are paid by the employer and do NOT reduce the employee's gross pay.
+    Including them confuses the AI into adding them as deductions.
+    """
+    import re
+    # Match "Company Contributions" as a section header (case-insensitive)
+    pattern = re.compile(r"Company\s+Contributions", re.IGNORECASE)
+    match = pattern.search(text)
+    if match:
+        truncated = text[:match.start()].rstrip()
+        logger.info(
+            f"Stripped Company Contributions section "
+            f"({len(text) - len(truncated)} chars removed)"
+        )
+        return truncated
+    return text
 
 
 _PAYSTUB_PROMPT = """You are a paystub parser. Extract the following information from this paystub.
