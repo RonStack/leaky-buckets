@@ -15,6 +15,7 @@ const STATUS_LABEL = {
 
 export default function Dashboard({ monthKey, setPage }) {
   const [summary, setSummary] = useState(null)
+  const [income, setIncome] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -26,10 +27,17 @@ export default function Dashboard({ monthKey, setPage }) {
     setLoading(true)
     setError('')
     try {
-      // Ensure default buckets exist (idempotent)
       await api.seedBuckets()
-      const data = await api.getMonthSummary(monthKey)
-      setSummary(data)
+      const monthData = await api.getMonthSummary(monthKey)
+      setSummary(monthData)
+
+      // Paystubs may not be deployed yet — don't break the page
+      try {
+        const incomeData = await api.getPaystubs(monthKey)
+        setIncome(incomeData)
+      } catch {
+        setIncome(null)
+      }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -42,6 +50,8 @@ export default function Dashboard({ monthKey, setPage }) {
   if (!summary) return null
 
   const hasTransactions = summary.transactionCount > 0
+  const hasIncome = income && income.count > 0
+  const hasAnyData = hasTransactions || hasIncome
 
   return (
     <div className="dashboard">
@@ -50,8 +60,14 @@ export default function Dashboard({ monthKey, setPage }) {
           {getMonthLabel(monthKey)}
           {summary.locked && <span className="locked-badge">🔒 Locked</span>}
         </h2>
-        {hasTransactions && (
+        {hasAnyData && (
           <div className="summary-stats">
+            {hasIncome && (
+              <div className="stat">
+                <span className="stat-value">${income.totals.grossPay.toLocaleString()}</span>
+                <span className="stat-label">earned</span>
+              </div>
+            )}
             <div className="stat">
               <span className="stat-value">${summary.totalSpent.toLocaleString()}</span>
               <span className="stat-label">spent</span>
@@ -70,22 +86,37 @@ export default function Dashboard({ monthKey, setPage }) {
         )}
       </div>
 
-      {!hasTransactions ? (
+      {/* 🚰 The Faucet — Income Waterfall */}
+      {hasIncome && <FaucetSection income={income} />}
+
+      {!hasAnyData ? (
         <div className="empty-state">
           <div className="empty-icon">🪣</div>
           <h3>No data yet for {getMonthLabel(monthKey)}</h3>
-          <p>Upload your bank & credit card statements to get started.</p>
+          <p>Upload your paystubs, bank & credit card statements to get started.</p>
           <button className="primary-btn" onClick={() => setPage('upload')}>
-            Upload Statements →
+            Upload →
           </button>
         </div>
       ) : (
         <>
-          <div className="bucket-grid">
-            {summary.buckets.map((bucket) => (
-              <BucketCard key={bucket.bucketId} bucket={bucket} onSetPage={setPage} />
-            ))}
-          </div>
+          {hasTransactions && (
+            <div className="bucket-grid">
+              {summary.buckets.map((bucket) => (
+                <BucketCard key={bucket.bucketId} bucket={bucket} onSetPage={setPage} />
+              ))}
+            </div>
+          )}
+
+          {!hasTransactions && hasIncome && (
+            <div className="empty-state" style={{ paddingTop: '24px' }}>
+              <h3>No spending data yet</h3>
+              <p>Upload your bank & credit card statements to see your buckets fill up.</p>
+              <button className="primary-btn" onClick={() => setPage('upload')}>
+                Upload Statements →
+              </button>
+            </div>
+          )}
 
           {summary.needsReview > 0 && !summary.locked && (
             <div className="cta-bar">
@@ -95,6 +126,110 @@ export default function Dashboard({ monthKey, setPage }) {
             </div>
           )}
         </>
+      )}
+    </div>
+  )
+}
+
+function FaucetSection({ income }) {
+  const t = income.totals
+  const gross = t.grossPay || 0
+  const federalTax = t.federalTax || 0
+  const stateTax = t.stateTax || 0
+  const fica = t.ficaMedicare || 0
+  const retirement = t.retirement || 0
+  const hsa = t.hsaFsa || 0
+  const debt = t.debtPayments || 0
+  const other = t.otherDeductions || 0
+  const net = t.netPay || 0
+
+  const totalTaxes = federalTax + stateTax + fica
+  const totalInvesting = retirement + hsa
+  const totalPreTakeHome = totalTaxes + totalInvesting + debt + other
+
+  // Each waterfall row shows what's removed and what remains
+  const rows = [
+    { label: '🏛️ Taxes', sub: 'Federal + State + FICA', amount: totalTaxes, items: [
+      { label: 'Federal', amount: federalTax },
+      { label: 'State', amount: stateTax },
+      { label: 'FICA / Medicare', amount: fica },
+    ]},
+    { label: '📈 Investing', sub: '401k / IRA / HSA', amount: totalInvesting, items: [
+      { label: 'Retirement', amount: retirement },
+      { label: 'HSA / FSA', amount: hsa },
+    ]},
+    { label: '💳 Debt Payments', sub: 'Loans', amount: debt, items: [] },
+    { label: '📋 Other Deductions', sub: '', amount: other, items: [] },
+  ].filter(r => r.amount > 0)
+
+  return (
+    <div className="faucet-section">
+      <div className="faucet-header">
+        <div className="faucet-icon">🚰</div>
+        <div>
+          <h3>The Faucet</h3>
+          <p className="faucet-subtitle">Where your money goes before it reaches your buckets</p>
+        </div>
+      </div>
+
+      {/* Gross income */}
+      <div className="faucet-gross">
+        <span className="faucet-gross-label">Gross Income</span>
+        <span className="faucet-gross-amount">${gross.toLocaleString()}</span>
+        <span className="faucet-count">{income.count} paystub{income.count !== 1 ? 's' : ''}</span>
+      </div>
+
+      <div className="faucet-flow-arrow">▼</div>
+
+      {/* Deduction rows */}
+      <div className="faucet-waterfall">
+        {rows.map((row, i) => (
+          <WaterfallRow key={i} row={row} gross={gross} />
+        ))}
+      </div>
+
+      <div className="faucet-flow-arrow">▼</div>
+
+      {/* Take-home */}
+      <div className="faucet-takehome">
+        <span className="faucet-takehome-label">💧 Take-Home Pay</span>
+        <span className="faucet-takehome-amount">${net.toLocaleString()}</span>
+        <span className="faucet-takehome-pct">
+          {gross > 0 ? Math.round((net / gross) * 100) : 0}% of gross
+        </span>
+      </div>
+
+      <div className="faucet-flow-arrow faucet-into-buckets">▼ flows into your buckets ▼</div>
+    </div>
+  )
+}
+
+function WaterfallRow({ row, gross }) {
+  const pct = gross > 0 ? Math.round((row.amount / gross) * 100) : 0
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div className="waterfall-row">
+      <div className="waterfall-row-main" onClick={() => row.items.length > 0 && setExpanded(!expanded)}>
+        <span className="waterfall-label">
+          {row.label}
+          {row.items.length > 0 && <span className="waterfall-expand">{expanded ? '▾' : '▸'}</span>}
+        </span>
+        <span className="waterfall-amount">−${row.amount.toLocaleString()}</span>
+        <span className="waterfall-pct">{pct}%</span>
+      </div>
+      <div className="waterfall-bar">
+        <div className="waterfall-bar-fill" style={{ width: `${Math.min(pct, 100)}%` }} />
+      </div>
+      {expanded && row.items.length > 0 && (
+        <div className="waterfall-details">
+          {row.items.filter(it => it.amount > 0).map((item, j) => (
+            <div key={j} className="waterfall-detail-row">
+              <span>{item.label}</span>
+              <span>${item.amount.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )

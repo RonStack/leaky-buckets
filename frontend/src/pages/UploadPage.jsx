@@ -1,25 +1,36 @@
 import React, { useState, useCallback } from 'react'
 import { api } from '../api'
 
+const SOURCES = {
+  bank: { label: '🏦 Bank Statement', accept: '.csv', type: 'csv' },
+  credit_card: { label: '💳 Credit Card', accept: '.csv', type: 'csv' },
+  paystub: { label: '📄 Paystub', accept: '.pdf', type: 'pdf' },
+}
+
 export default function UploadPage({ monthKey, setPage }) {
   const [file, setFile] = useState(null)
   const [source, setSource] = useState('bank')
+  const [paystubSource, setPaystubSource] = useState('')
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [result, setResult] = useState(null)
+  const [paystubResult, setPaystubResult] = useState(null)
   const [error, setError] = useState('')
+
+  const isPaystub = source === 'paystub'
+  const fileExt = isPaystub ? '.pdf' : '.csv'
 
   const handleDrop = useCallback((e) => {
     e.preventDefault()
     setDragging(false)
     const f = e.dataTransfer.files[0]
-    if (f && f.name.endsWith('.csv')) {
+    if (f && f.name.toLowerCase().endsWith(fileExt)) {
       setFile(f)
       setError('')
     } else {
-      setError('Please drop a .csv file')
+      setError(`Please drop a ${fileExt} file`)
     }
-  }, [])
+  }, [fileExt])
 
   const handleFileSelect = (e) => {
     const f = e.target.files[0]
@@ -29,17 +40,37 @@ export default function UploadPage({ monthKey, setPage }) {
     }
   }
 
+  function handleSourceChange(newSource) {
+    setSource(newSource)
+    setFile(null)
+    setResult(null)
+    setPaystubResult(null)
+    setError('')
+  }
+
   async function handleUpload() {
     if (!file) return
     setUploading(true)
     setError('')
     setResult(null)
+    setPaystubResult(null)
 
     try {
-      const text = await file.text()
-      const data = await api.upload(file.name, source, text)
-      setResult(data)
-      setFile(null)
+      if (isPaystub) {
+        // Read PDF as base64
+        const arrayBuffer = await file.arrayBuffer()
+        const base64 = btoa(
+          new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+        )
+        const data = await api.uploadPaystub(file.name, paystubSource || 'Primary Job', base64)
+        setPaystubResult(data)
+        setFile(null)
+      } else {
+        const text = await file.text()
+        const data = await api.upload(file.name, source, text)
+        setResult(data)
+        setFile(null)
+      }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -49,25 +80,34 @@ export default function UploadPage({ monthKey, setPage }) {
 
   return (
     <div className="upload-page">
-      <h2>Upload Statements</h2>
+      <h2>Upload</h2>
       <p className="page-subtitle">
-        Drop your bank or credit card CSV below. We'll handle the rest.
+        Drop your statements or paystubs below. We'll handle the rest.
       </p>
 
       <div className="source-toggle">
-        <button
-          className={source === 'bank' ? 'active' : ''}
-          onClick={() => setSource('bank')}
-        >
-          🏦 Bank Statement
-        </button>
-        <button
-          className={source === 'credit_card' ? 'active' : ''}
-          onClick={() => setSource('credit_card')}
-        >
-          💳 Credit Card
-        </button>
+        {Object.entries(SOURCES).map(([key, { label }]) => (
+          <button
+            key={key}
+            className={source === key ? 'active' : ''}
+            onClick={() => handleSourceChange(key)}
+          >
+            {label}
+          </button>
+        ))}
       </div>
+
+      {isPaystub && (
+        <div className="paystub-source-input">
+          <label>Income source name:</label>
+          <input
+            type="text"
+            value={paystubSource}
+            onChange={(e) => setPaystubSource(e.target.value)}
+            placeholder="e.g., Primary Job, Side Gig, Freelance"
+          />
+        </div>
+      )}
 
       <div
         className={`drop-zone ${dragging ? 'dragging' : ''} ${file ? 'has-file' : ''}`}
@@ -79,36 +119,40 @@ export default function UploadPage({ monthKey, setPage }) {
         <input
           id="file-input"
           type="file"
-          accept=".csv"
+          accept={SOURCES[source].accept}
           onChange={handleFileSelect}
           hidden
+          key={source} // Reset input when source changes
         />
         {file ? (
           <div className="file-preview">
-            <div className="file-icon">📄</div>
+            <div className="file-icon">{isPaystub ? '📄' : '📊'}</div>
             <div className="file-name">{file.name}</div>
             <div className="file-size">{(file.size / 1024).toFixed(1)} KB</div>
           </div>
         ) : (
           <div className="drop-prompt">
-            <div className="drop-icon">📂</div>
-            <div>Drop your CSV here, or click to browse</div>
+            <div className="drop-icon">{isPaystub ? '📄' : '📂'}</div>
+            <div>Drop your {isPaystub ? 'PDF paystub' : 'CSV statement'} here, or click to browse</div>
           </div>
         )}
       </div>
 
       {error && <div className="error-msg">{error}</div>}
 
-      {file && !result && (
+      {file && !result && !paystubResult && (
         <button
           className="primary-btn upload-btn"
           onClick={handleUpload}
           disabled={uploading}
         >
-          {uploading ? 'Processing... 🔄' : `Upload ${source === 'bank' ? '🏦' : '💳'} Statement`}
+          {uploading
+            ? (isPaystub ? 'Parsing paystub with AI... 🤖' : 'Processing... 🔄')
+            : `Upload ${SOURCES[source].label}`}
         </button>
       )}
 
+      {/* CSV upload result */}
       {result && (
         <div className="upload-result">
           <div className="result-icon">✅</div>
@@ -139,6 +183,67 @@ export default function UploadPage({ monthKey, setPage }) {
             )}
             <button className="secondary-btn" onClick={() => { setResult(null); setFile(null) }}>
               Upload another file
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Paystub result */}
+      {paystubResult && (
+        <div className="upload-result paystub-result">
+          <div className="result-icon">🚰</div>
+          <h3>Paystub parsed!</h3>
+          <p className="paystub-employer">{paystubResult.parsed.employer} — {paystubResult.parsed.payDate}</p>
+          <div className="paystub-breakdown">
+            <div className="paystub-line gross">
+              <span>🚰 Gross Pay</span>
+              <span className="paystub-amount">${paystubResult.parsed.grossPay.toLocaleString()}</span>
+            </div>
+            <div className="paystub-divider" />
+            <div className="paystub-line">
+              <span>🏛️ Federal Tax</span>
+              <span className="paystub-amount deduction">-${paystubResult.parsed.federalTax.toLocaleString()}</span>
+            </div>
+            <div className="paystub-line">
+              <span>🏛️ State Tax</span>
+              <span className="paystub-amount deduction">-${paystubResult.parsed.stateTax.toLocaleString()}</span>
+            </div>
+            <div className="paystub-line">
+              <span>🏛️ FICA / Medicare</span>
+              <span className="paystub-amount deduction">-${paystubResult.parsed.ficaMedicare.toLocaleString()}</span>
+            </div>
+            <div className="paystub-line">
+              <span>📈 Retirement (401k/IRA)</span>
+              <span className="paystub-amount deduction">-${paystubResult.parsed.retirement.toLocaleString()}</span>
+            </div>
+            <div className="paystub-line">
+              <span>🏥 HSA / FSA</span>
+              <span className="paystub-amount deduction">-${paystubResult.parsed.hsaFsa.toLocaleString()}</span>
+            </div>
+            {paystubResult.parsed.debtPayments > 0 && (
+              <div className="paystub-line">
+                <span>💳 Debt Payments</span>
+                <span className="paystub-amount deduction">-${paystubResult.parsed.debtPayments.toLocaleString()}</span>
+              </div>
+            )}
+            {paystubResult.parsed.otherDeductions > 0 && (
+              <div className="paystub-line">
+                <span>📋 Other Deductions</span>
+                <span className="paystub-amount deduction">-${paystubResult.parsed.otherDeductions.toLocaleString()}</span>
+              </div>
+            )}
+            <div className="paystub-divider" />
+            <div className="paystub-line net">
+              <span>💧 Take-Home Pay</span>
+              <span className="paystub-amount">${paystubResult.parsed.netPay.toLocaleString()}</span>
+            </div>
+          </div>
+          <div className="result-actions">
+            <button className="primary-btn" onClick={() => setPage('dashboard')}>
+              View Dashboard →
+            </button>
+            <button className="secondary-btn" onClick={() => { setPaystubResult(null); setFile(null) }}>
+              Upload another paystub
             </button>
           </div>
         </div>

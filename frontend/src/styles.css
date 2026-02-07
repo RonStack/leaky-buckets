@@ -470,6 +470,244 @@ body {
   margin-top: 20px;
 }
 
+/* ---- Paystub upload ---- */
+
+.paystub-source-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.paystub-source-input label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.paystub-source-input input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  outline: none;
+}
+.paystub-source-input input:focus { border-color: var(--accent); }
+
+.paystub-employer {
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.paystub-breakdown {
+  text-align: left;
+  margin: 16px 0;
+  padding: 16px;
+  background: var(--bg);
+  border-radius: var(--radius);
+}
+
+.paystub-line {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 0.95rem;
+}
+
+.paystub-line.gross {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--accent);
+}
+
+.paystub-line.net {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--green);
+}
+
+.paystub-amount { font-weight: 600; }
+.paystub-amount.deduction { color: var(--text-muted); }
+
+.paystub-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 8px 0;
+}
+
+/* ---- Faucet (Income Waterfall) ---- */
+
+.faucet-section {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 24px;
+  margin-bottom: 28px;
+}
+
+.faucet-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.faucet-icon { font-size: 2rem; }
+
+.faucet-header h3 {
+  font-size: 1.2rem;
+  margin: 0;
+}
+
+.faucet-subtitle {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: 2px 0 0;
+}
+
+.faucet-gross {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #e8f0fe, #d4e4fc);
+  border-radius: 10px;
+  flex-wrap: wrap;
+}
+
+.faucet-gross-label {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.faucet-gross-amount {
+  font-weight: 700;
+  font-size: 1.4rem;
+  color: var(--accent);
+}
+
+.faucet-count {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.faucet-flow-arrow {
+  text-align: center;
+  color: var(--accent);
+  font-size: 1.1rem;
+  padding: 6px 0;
+  opacity: 0.6;
+}
+
+.faucet-into-buckets {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  padding: 8px 0 0;
+}
+
+.faucet-waterfall {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.waterfall-row {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.waterfall-row-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.waterfall-label {
+  flex: 1;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
+.waterfall-expand {
+  font-size: 0.8rem;
+  margin-left: 4px;
+  color: var(--text-muted);
+}
+
+.waterfall-amount {
+  font-weight: 600;
+  color: var(--red);
+  font-size: 0.95rem;
+}
+
+.waterfall-pct {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  min-width: 36px;
+  text-align: right;
+}
+
+.waterfall-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.waterfall-bar-fill {
+  height: 100%;
+  background: var(--red);
+  border-radius: 2px;
+  opacity: 0.5;
+  transition: width 0.3s ease;
+}
+
+.waterfall-details {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.waterfall-detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.faucet-takehome {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #e8f8e9, #c8e6c9);
+  border-radius: 10px;
+  flex-wrap: wrap;
+}
+
+.faucet-takehome-label {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.faucet-takehome-amount {
+  font-weight: 700;
+  font-size: 1.4rem;
+  color: var(--green);
+}
+
+.faucet-takehome-pct {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
 /* ---- Review ---- */
 
 .review-header {

@@ -44,6 +44,7 @@ def handler(event, context):
         "buckets": 0,
         "merchants": 0,
         "summaries": 0,
+        "paystubs": 0,
         "s3_objects": 0,
     }
 
@@ -76,7 +77,19 @@ def handler(event, context):
             delete_item(s_table, {"monthKey": s["monthKey"]})
             deleted["summaries"] += 1
 
-        # 5. Delete all S3 uploads (raw + normalized)
+        # 5. Delete all paystubs
+        try:
+            import boto3 as _b3
+            _ddb = _b3.resource("dynamodb")
+            p_table = _ddb.Table(os.environ.get("PAYSTUBS_TABLE", ""))
+            paystubs = scan_all(p_table)
+            for p in paystubs:
+                delete_item(p_table, {"paystubId": p["paystubId"]})
+                deleted["paystubs"] += 1
+        except Exception as e:
+            print(f"Paystub cleanup warning: {e}")
+
+        # 6. Delete all S3 uploads (raw + normalized + paystubs)
         if BUCKET:
             try:
                 paginator = s3.get_paginator("list_objects_v2")

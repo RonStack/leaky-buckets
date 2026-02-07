@@ -61,4 +61,19 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ confirmation: 'DELETE' }),
     }),
+
+  // Paystubs (The Faucet 🚰)
+  uploadPaystub: (fileName, source, pdfContent) =>
+    request('/paystub', {
+      method: 'POST',
+      body: JSON.stringify({ fileName, source, pdfContent }),
+    }),
+  getPaystubs: (monthKey) => request(`/paystub?monthKey=${monthKey}`),
+  updatePaystub: (paystubId, updates) =>
+    request(`/paystub/${paystubId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    }),
+  deletePaystub: (paystubId) =>
+    request(`/paystub/${paystubId}`, { method: 'DELETE' }),
 }

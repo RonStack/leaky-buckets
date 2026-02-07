@@ -194,6 +194,36 @@ Resources:
         - Key: App
           Value: leaky-buckets
 
+  PaystubsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "lb-paystubs-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: !Ref AppKey
+      AttributeDefinitions:
+        - AttributeName: paystubId
+          AttributeType: S
+        - AttributeName: monthKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: paystubId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: byMonth
+          KeySchema:
+            - AttributeName: monthKey
+              KeyType: HASH
+            - AttributeName: paystubId
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: App
+          Value: leaky-buckets
+
 Outputs:
   KmsKeyArn:
     Value: !GetAtt AppKey.Arn
@@ -234,3 +264,8 @@ Outputs:
     Value: !Ref MonthlySummariesTable
     Export:
       Name: !Sub "lb-${Environment}-monthly-summaries-table"
+
+  PaystubsTableName:
+    Value: !Ref PaystubsTable
+    Export:
+      Name: !Sub "lb-${Environment}-paystubs-table"

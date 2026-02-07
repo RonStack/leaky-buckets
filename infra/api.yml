@@ -35,6 +35,8 @@ Globals:
           Fn::Sub: "lb-${Environment}-buckets-table"
         MONTHLY_SUMMARIES_TABLE: !ImportValue
           Fn::Sub: "lb-${Environment}-monthly-summaries-table"
+        PAYSTUBS_TABLE: !ImportValue
+          Fn::Sub: "lb-${Environment}-paystubs-table"
         KMS_KEY_ARN: !ImportValue
           Fn::Sub: "lb-${Environment}-kms-key-arn"
         OPENAI_API_KEY: !Ref OpenAiApiKey
@@ -220,6 +222,41 @@ Resources:
             RestApiId: !Ref Api
             Path: /month/{monthKey}/lock
             Method: POST
+
+  PaystubFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "lb-paystub-${Environment}"
+      Handler: handlers/paystub.handler
+      CodeUri: ../backend/
+      Role: !GetAtt LambdaRole.Arn
+      Timeout: 90
+      MemorySize: 512
+      Events:
+        Upload:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /paystub
+            Method: POST
+        List:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /paystub
+            Method: GET
+        Update:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /paystub/{paystubId}
+            Method: PUT
+        Delete:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /paystub/{paystubId}
+            Method: DELETE
 
   DeleteDataFunction:
     Type: AWS::Serverless::Function
