@@ -1,10 +1,10 @@
 """
-Paystub Parser — PDF → OpenAI GPT-4o vision → structured income data.
+Paystub Parser — PDF → text extraction → OpenAI GPT-4o → structured income data.
 
 Flow:
 1. Receive PDF as base64
-2. Convert PDF pages to PNG images using PyMuPDF
-3. Send images to OpenAI GPT-4o for extraction
+2. Extract text from PDF using pypdf
+3. Send text to OpenAI GPT-4o for structured extraction
 4. Return structured paystub data
 
 All deduction categories:
@@ -23,6 +23,7 @@ import logging
 import io
 
 from openai import OpenAI
+from pypdf import PdfReader
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ DEDUCTION_CATEGORIES = [
 
 def parse_paystub_pdf(pdf_base64: str) -> dict:
     """
-    Parse a paystub PDF using OpenAI GPT-4o vision.
+    Parse a paystub PDF using text extraction + OpenAI GPT-4o.
 
     Args:
         pdf_base64: base64-encoded PDF content
@@ -51,66 +52,53 @@ def parse_paystub_pdf(pdf_base64: str) -> dict:
             "payDate": "2026-01-15",
             "employer": "Acme Corp",
             "federalTax": 600.00,
-            "stateTax": 250.00,
-            "ficaMedicare": 382.50,
-            "retirement": 400.00,
-            "hsaFsa": 100.00,
-            "debtPayments": 67.50,
-            "otherDeductions": 0.00,
-            "details": { ... raw line items ... }
+            ...
         }
     """
     api_key = os.environ.get("OPENAI_API_KEY", "")
     if not api_key or api_key == "PLACEHOLDER_UPDATE_ME":
         raise ValueError("OpenAI API key not configured — required for paystub parsing")
 
-    # Convert PDF pages to images
-    images_base64 = _pdf_to_images(pdf_base64)
+    # Extract text from PDF
+    pdf_text = _extract_pdf_text(pdf_base64)
 
-    if not images_base64:
-        raise ValueError("Could not extract any pages from the PDF")
+    if not pdf_text or len(pdf_text.strip()) < 50:
+        raise ValueError(
+            "Could not extract readable text from this PDF. "
+            "The paystub may be image-based (scanned). "
+            "Please try a digitally-generated PDF from your payroll provider."
+        )
 
-    # Send to OpenAI
-    result = _extract_with_openai(api_key, images_base64)
+    logger.info(f"Extracted {len(pdf_text)} chars of text from PDF")
+
+    # Send text to OpenAI for structured extraction
+    result = _extract_with_openai(api_key, pdf_text)
     return result
 
 
-def _pdf_to_images(pdf_base64: str) -> list[str]:
-    """Convert PDF pages to base64-encoded PNG images."""
-    try:
-        import fitz  # PyMuPDF
-    except ImportError:
-        # Fallback: send PDF directly as base64 to OpenAI
-        # GPT-4o supports PDF input in some configurations
-        logger.warning("PyMuPDF not available, sending PDF directly")
-        return [pdf_base64]
-
+def _extract_pdf_text(pdf_base64: str) -> str:
+    """Extract text content from a PDF using pypdf."""
     pdf_bytes = base64.b64decode(pdf_base64)
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    images = []
+    reader = PdfReader(io.BytesIO(pdf_bytes))
 
-    for page_num in range(min(doc.page_count, 4)):  # Max 4 pages
-        page = doc[page_num]
-        # Render at 2x for readability
-        mat = fitz.Matrix(2.0, 2.0)
-        pix = page.get_pixmap(matrix=mat)
-        img_bytes = pix.tobytes("png")
-        img_b64 = base64.b64encode(img_bytes).decode("utf-8")
-        images.append(img_b64)
+    all_text = []
+    for page in reader.pages[:4]:  # Max 4 pages
+        text = page.extract_text()
+        if text:
+            all_text.append(text)
 
-    doc.close()
-    return images
+    return "\n\n--- Page Break ---\n\n".join(all_text)
 
 
-def _extract_with_openai(api_key: str, images_base64: list[str]) -> dict:
-    """Send paystub images to GPT-4o and extract structured data."""
+def _extract_with_openai(api_key: str, pdf_text: str) -> dict:
+    """Send paystub text to GPT-4o and extract structured data."""
     client = OpenAI(api_key=api_key)
 
-    prompt = """You are a paystub parser. Extract the following information from this paystub image(s).
+    prompt = f"""You are a paystub parser. Extract the following information from this paystub text.
 
 Return ONLY valid JSON with these exact fields (use 0.00 for any field not found):
 
-{
+{{
     "grossPay": <total gross pay for this pay period as a number>,
     "netPay": <net/take-home pay as a number>,
     "payDate": "<pay date in YYYY-MM-DD format>",
@@ -122,12 +110,12 @@ Return ONLY valid JSON with these exact fields (use 0.00 for any field not found
     "hsaFsa": <HSA + FSA contributions combined as a number>,
     "debtPayments": <401k loan repayments + other debt deductions as a number>,
     "otherDeductions": <any other deductions not in the above categories as a number>,
-    "details": {
+    "details": {{
         "lineItems": [
-            {"name": "<deduction name>", "amount": <amount>, "category": "<which of the above categories>"}
+            {{"name": "<deduction name>", "amount": <amount>, "category": "<which of the above categories>"}}
         ]
-    }
-}
+    }}
+}}
 
 Important:
 - All amounts should be for the CURRENT pay period only (not YTD)
@@ -139,22 +127,15 @@ Important:
 - hsaFsa = Health Savings Account + Flexible Spending Account
 - debtPayments = 401k Loan + any loan repayments deducted from pay
 - otherDeductions = dental, vision, life insurance, disability, union dues, etc.
-- Return ONLY the JSON, no markdown fences or extra text"""
+- Return ONLY the JSON, no markdown fences or extra text
 
-    # Build message content with images
-    content = [{"type": "text", "text": prompt}]
-    for img_b64 in images_base64:
-        content.append({
-            "type": "image_url",
-            "image_url": {
-                "url": f"data:image/png;base64,{img_b64}",
-                "detail": "high",
-            },
-        })
+--- PAYSTUB TEXT ---
+{pdf_text}
+--- END ---"""
 
     response = client.chat.completions.create(
         model="gpt-4o",
-        messages=[{"role": "user", "content": content}],
+        messages=[{"role": "user", "content": prompt}],
         temperature=0,
         max_tokens=1500,
     )
