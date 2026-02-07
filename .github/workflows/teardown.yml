@@ -1,0 +1,82 @@
+name: Teardown Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type 'destroy' to confirm teardown"
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ENVIRONMENT: prod
+  STACK_PREFIX: lb
+
+jobs:
+  teardown:
+    name: Teardown All Stacks
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm == 'destroy'
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Delete in reverse dependency order
+      - name: Delete API stack
+        run: |
+          aws cloudformation delete-stack \
+            --stack-name ${{ env.STACK_PREFIX }}-api-${{ env.ENVIRONMENT }}
+          aws cloudformation wait stack-delete-complete \
+            --stack-name ${{ env.STACK_PREFIX }}-api-${{ env.ENVIRONMENT }} || true
+
+      - name: Delete Auth stack
+        run: |
+          aws cloudformation delete-stack \
+            --stack-name ${{ env.STACK_PREFIX }}-auth-${{ env.ENVIRONMENT }}
+          aws cloudformation wait stack-delete-complete \
+            --stack-name ${{ env.STACK_PREFIX }}-auth-${{ env.ENVIRONMENT }} || true
+
+      - name: Empty uploads bucket
+        run: |
+          BUCKET=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_PREFIX }}-foundation-${{ env.ENVIRONMENT }} \
+            --query "Stacks[0].Outputs[?OutputKey=='UploadsBucketName'].OutputValue" \
+            --output text 2>/dev/null || echo "")
+          if [ -n "$BUCKET" ] && [ "$BUCKET" != "None" ]; then
+            aws s3 rm s3://$BUCKET --recursive || true
+            # Delete all object versions
+            aws s3api list-object-versions --bucket $BUCKET \
+              --query 'Versions[].{Key:Key,VersionId:VersionId}' --output json 2>/dev/null | \
+              jq -c '.[]' | while read obj; do
+                KEY=$(echo $obj | jq -r '.Key')
+                VID=$(echo $obj | jq -r '.VersionId')
+                aws s3api delete-object --bucket $BUCKET --key "$KEY" --version-id "$VID" || true
+              done
+            # Delete markers
+            aws s3api list-object-versions --bucket $BUCKET \
+              --query 'DeleteMarkers[].{Key:Key,VersionId:VersionId}' --output json 2>/dev/null | \
+              jq -c '.[]' | while read obj; do
+                KEY=$(echo $obj | jq -r '.Key')
+                VID=$(echo $obj | jq -r '.VersionId')
+                aws s3api delete-object --bucket $BUCKET --key "$KEY" --version-id "$VID" || true
+              done
+          fi
+
+      - name: Delete Foundation stack
+        run: |
+          aws cloudformation delete-stack \
+            --stack-name ${{ env.STACK_PREFIX }}-foundation-${{ env.ENVIRONMENT }}
+          aws cloudformation wait stack-delete-complete \
+            --stack-name ${{ env.STACK_PREFIX }}-foundation-${{ env.ENVIRONMENT }} || true
+
+      - name: Teardown complete
+        run: echo "All leaky-buckets stacks destroyed."

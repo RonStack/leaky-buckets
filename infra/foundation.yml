@@ -1,0 +1,236 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Leaky-Buckets Foundation — S3 buckets, DynamoDB tables, KMS key"
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [prod]
+
+Resources:
+  # -------------------------------------------------------
+  # KMS — single key for all at-rest encryption
+  # -------------------------------------------------------
+  AppKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: Leaky-Buckets encryption key
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowRootAccount
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: "kms:*"
+            Resource: "*"
+
+  AppKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/lb-${Environment}"
+      TargetKeyId: !Ref AppKey
+
+  # -------------------------------------------------------
+  # S3 — SAM deployment artifacts bucket
+  # -------------------------------------------------------
+  SamArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "lb-sam-artifacts-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: App
+          Value: leaky-buckets
+        - Key: Environment
+          Value: !Ref Environment
+
+  # -------------------------------------------------------
+  # S3 — uploads bucket (raw + normalized prefixes)
+  # -------------------------------------------------------
+  UploadsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "lb-uploads-${Environment}-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Ref AppKey
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 90
+      Tags:
+        - Key: App
+          Value: leaky-buckets
+        - Key: Environment
+          Value: !Ref Environment
+
+  # -------------------------------------------------------
+  # DynamoDB Tables
+  # -------------------------------------------------------
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "lb-users-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: !Ref AppKey
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+      Tags:
+        - Key: App
+          Value: leaky-buckets
+
+  TransactionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "lb-transactions-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: !Ref AppKey
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: monthKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: byMonth
+          KeySchema:
+            - AttributeName: monthKey
+              KeyType: HASH
+            - AttributeName: sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: App
+          Value: leaky-buckets
+
+  MerchantsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "lb-merchants-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: !Ref AppKey
+      AttributeDefinitions:
+        - AttributeName: merchantName
+          AttributeType: S
+      KeySchema:
+        - AttributeName: merchantName
+          KeyType: HASH
+      Tags:
+        - Key: App
+          Value: leaky-buckets
+
+  BucketsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "lb-buckets-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: !Ref AppKey
+      AttributeDefinitions:
+        - AttributeName: bucketId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: bucketId
+          KeyType: HASH
+      Tags:
+        - Key: App
+          Value: leaky-buckets
+
+  MonthlySummariesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "lb-monthly-summaries-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: !Ref AppKey
+      AttributeDefinitions:
+        - AttributeName: monthKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: monthKey
+          KeyType: HASH
+      Tags:
+        - Key: App
+          Value: leaky-buckets
+
+Outputs:
+  KmsKeyArn:
+    Value: !GetAtt AppKey.Arn
+    Export:
+      Name: !Sub "lb-${Environment}-kms-key-arn"
+
+  UploadsBucketName:
+    Value: !Ref UploadsBucket
+    Export:
+      Name: !Sub "lb-${Environment}-uploads-bucket"
+
+  UploadsBucketArn:
+    Value: !GetAtt UploadsBucket.Arn
+    Export:
+      Name: !Sub "lb-${Environment}-uploads-bucket-arn"
+
+  UsersTableName:
+    Value: !Ref UsersTable
+    Export:
+      Name: !Sub "lb-${Environment}-users-table"
+
+  TransactionsTableName:
+    Value: !Ref TransactionsTable
+    Export:
+      Name: !Sub "lb-${Environment}-transactions-table"
+
+  MerchantsTableName:
+    Value: !Ref MerchantsTable
+    Export:
+      Name: !Sub "lb-${Environment}-merchants-table"
+
+  BucketsTableName:
+    Value: !Ref BucketsTable
+    Export:
+      Name: !Sub "lb-${Environment}-buckets-table"
+
+  MonthlySummariesTableName:
+    Value: !Ref MonthlySummariesTable
+    Export:
+      Name: !Sub "lb-${Environment}-monthly-summaries-table"

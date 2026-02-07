@@ -1,0 +1,221 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: "Leaky-Buckets API — API Gateway + Lambda functions"
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [prod]
+
+  OpenAiApiKey:
+    Type: String
+    NoEcho: true
+    Description: OpenAI API key for merchant categorization
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 30
+    MemorySize: 256
+    Architectures:
+      - arm64
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        UPLOADS_BUCKET: !ImportValue
+          Fn::Sub: "lb-${Environment}-uploads-bucket"
+        USERS_TABLE: !ImportValue
+          Fn::Sub: "lb-${Environment}-users-table"
+        TRANSACTIONS_TABLE: !ImportValue
+          Fn::Sub: "lb-${Environment}-transactions-table"
+        MERCHANTS_TABLE: !ImportValue
+          Fn::Sub: "lb-${Environment}-merchants-table"
+        BUCKETS_TABLE: !ImportValue
+          Fn::Sub: "lb-${Environment}-buckets-table"
+        MONTHLY_SUMMARIES_TABLE: !ImportValue
+          Fn::Sub: "lb-${Environment}-monthly-summaries-table"
+        KMS_KEY_ARN: !ImportValue
+          Fn::Sub: "lb-${Environment}-kms-key-arn"
+        OPENAI_API_KEY: !Ref OpenAiApiKey
+
+Resources:
+  # -------------------------------------------------------
+  # API Gateway
+  # -------------------------------------------------------
+  Api:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "lb-api-${Environment}"
+      StageName: !Ref Environment
+      Auth:
+        DefaultAuthorizer: CognitoAuth
+        Authorizers:
+          CognitoAuth:
+            UserPoolArn: !ImportValue
+              Fn::Sub: "lb-${Environment}-user-pool-arn"
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+
+  # -------------------------------------------------------
+  # Shared Lambda execution role
+  # -------------------------------------------------------
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "lb-lambda-role-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: AppAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:BatchWriteItem
+                  - dynamodb:BatchGetItem
+                Resource:
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/lb-*-${Environment}"
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/lb-*-${Environment}/index/*"
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !ImportValue
+                    Fn::Sub: "lb-${Environment}-uploads-bucket-arn"
+                  - !Sub
+                    - "${BucketArn}/*"
+                    - BucketArn: !ImportValue
+                        Fn::Sub: "lb-${Environment}-uploads-bucket-arn"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:Encrypt
+                  - kms:GenerateDataKey
+                Resource:
+                  - !ImportValue
+                    Fn::Sub: "lb-${Environment}-kms-key-arn"
+
+  # -------------------------------------------------------
+  # Lambda Functions
+  # -------------------------------------------------------
+  HealthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "lb-health-${Environment}"
+      Handler: handlers/health.handler
+      CodeUri: ../backend/
+      Role: !GetAtt LambdaRole.Arn
+      Events:
+        Get:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /health
+            Method: GET
+            Auth:
+              Authorizer: NONE
+
+  UploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "lb-upload-${Environment}"
+      Handler: handlers/upload.handler
+      CodeUri: ../backend/
+      Role: !GetAtt LambdaRole.Arn
+      Timeout: 60
+      Events:
+        Post:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /upload
+            Method: POST
+
+  TransactionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "lb-transactions-${Environment}"
+      Handler: handlers/transactions.handler
+      CodeUri: ../backend/
+      Role: !GetAtt LambdaRole.Arn
+      Events:
+        List:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /transactions
+            Method: GET
+        Review:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /transactions/{transactionId}
+            Method: PUT
+
+  BucketsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "lb-buckets-${Environment}"
+      Handler: handlers/buckets.handler
+      CodeUri: ../backend/
+      Role: !GetAtt LambdaRole.Arn
+      Events:
+        List:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /buckets
+            Method: GET
+        Update:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /buckets/{bucketId}
+            Method: PUT
+
+  MonthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "lb-month-${Environment}"
+      Handler: handlers/month.handler
+      CodeUri: ../backend/
+      Role: !GetAtt LambdaRole.Arn
+      Events:
+        Summary:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /month/{monthKey}
+            Method: GET
+        Lock:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /month/{monthKey}/lock
+            Method: POST
+
+Outputs:
+  ApiUrl:
+    Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
+    Export:
+      Name: !Sub "lb-${Environment}-api-url"

@@ -1,0 +1,155 @@
+name: Deploy Infrastructure
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - "backend/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ENVIRONMENT: prod
+  STACK_PREFIX: lb
+
+jobs:
+  # ----------------------------------------------------------
+  # Validate all templates before deploying anything
+  # ----------------------------------------------------------
+  validate:
+    name: Validate CloudFormation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Validate foundation template
+        run: aws cloudformation validate-template --template-body file://infra/foundation.yml
+
+      - name: Validate auth template
+        run: aws cloudformation validate-template --template-body file://infra/auth.yml
+
+      - name: Validate API template (SAM)
+        uses: aws-actions/setup-sam@v2
+      - run: sam validate --template-file infra/api.yml --region ${{ env.AWS_REGION }}
+
+  # ----------------------------------------------------------
+  # Deploy foundation stack (S3, DynamoDB, KMS)
+  # ----------------------------------------------------------
+  deploy-foundation:
+    name: Deploy Foundation
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy foundation stack
+        run: |
+          aws cloudformation deploy \
+            --template-file infra/foundation.yml \
+            --stack-name ${{ env.STACK_PREFIX }}-foundation-${{ env.ENVIRONMENT }} \
+            --parameter-overrides Environment=${{ env.ENVIRONMENT }} \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset \
+            --tags App=leaky-buckets Environment=${{ env.ENVIRONMENT }}
+
+  # ----------------------------------------------------------
+  # Deploy auth stack (Cognito)
+  # ----------------------------------------------------------
+  deploy-auth:
+    name: Deploy Auth
+    needs: deploy-foundation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy auth stack
+        run: |
+          aws cloudformation deploy \
+            --template-file infra/auth.yml \
+            --stack-name ${{ env.STACK_PREFIX }}-auth-${{ env.ENVIRONMENT }} \
+            --parameter-overrides Environment=${{ env.ENVIRONMENT }} \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset \
+            --tags App=leaky-buckets Environment=${{ env.ENVIRONMENT }}
+
+  # ----------------------------------------------------------
+  # Deploy API stack (SAM — API Gateway + Lambdas)
+  # ----------------------------------------------------------
+  deploy-api:
+    name: Deploy API
+    needs: [deploy-foundation, deploy-auth]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        run: |
+          pip install -r backend/requirements.txt -t backend/
+
+      - name: SAM build
+        run: sam build --template-file infra/api.yml
+
+      - name: SAM deploy
+        run: |
+          sam deploy \
+            --template-file .aws-sam/build/template.yaml \
+            --stack-name ${{ env.STACK_PREFIX }}-api-${{ env.ENVIRONMENT }} \
+            --parameter-overrides \
+              Environment=${{ env.ENVIRONMENT }} \
+              OpenAiApiKey=${{ secrets.OPENAI_API_KEY }} \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset \
+            --no-confirm-changeset \
+            --s3-bucket ${{ vars.SAM_ARTIFACTS_BUCKET }} \
+            --s3-prefix ${{ env.STACK_PREFIX }}-api \
+            --region ${{ env.AWS_REGION }} \
+            --tags App=leaky-buckets Environment=${{ env.ENVIRONMENT }}
+
+      - name: Print API URL
+        run: |
+          aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_PREFIX }}-api-${{ env.ENVIRONMENT }} \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
+            --output text
