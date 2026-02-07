@@ -50,6 +50,7 @@ Resources:
       StageName: !Ref Environment
       Auth:
         DefaultAuthorizer: CognitoAuth
+        AddDefaultAuthorizerToCorsPreflight: false
         Authorizers:
           CognitoAuth:
             UserPoolArn: !ImportValue
