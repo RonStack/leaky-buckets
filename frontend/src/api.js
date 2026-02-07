@@ -35,10 +35,10 @@ export const api = {
 
   // Transactions
   getTransactions: (monthKey) => request(`/transactions?monthKey=${monthKey}`),
-  updateTransaction: (transactionId, bucket, rememberMerchant = false) =>
+  updateTransaction: (transactionId, bucket, rememberMerchant = false, monthKey = '') =>
     request(`/transactions/${transactionId}`, {
       method: 'PUT',
-      body: JSON.stringify({ bucket, rememberMerchant }),
+      body: JSON.stringify({ bucket, rememberMerchant, monthKey }),
     }),
 
   // Buckets
@@ -54,4 +54,11 @@ export const api = {
   getMonthSummary: (monthKey) => request(`/month/${monthKey}`),
   lockMonth: (monthKey) =>
     request(`/month/${monthKey}/lock`, { method: 'POST' }),
+
+  // Delete all data
+  deleteAllData: () =>
+    request('/delete-all-data', {
+      method: 'POST',
+      body: JSON.stringify({ confirmation: 'DELETE' }),
+    }),
 }

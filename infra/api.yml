@@ -57,7 +57,7 @@ Resources:
       Cors:
         AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
         AllowHeaders: "'Content-Type,Authorization'"
-        AllowOrigin: "'*'"
+        AllowOrigin: "'https://leakingbuckets.goronny.com'"
 
   # -------------------------------------------------------
   # Shared Lambda execution role
@@ -218,6 +218,22 @@ Resources:
           Properties:
             RestApiId: !Ref Api
             Path: /month/{monthKey}/lock
+            Method: POST
+
+  DeleteDataFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "lb-deletedata-${Environment}"
+      Handler: handlers/deletedata.handler
+      CodeUri: ../backend/
+      Role: !GetAtt LambdaRole.Arn
+      Timeout: 60
+      Events:
+        Delete:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /delete-all-data
             Method: POST
 
 Outputs:

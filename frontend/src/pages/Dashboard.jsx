@@ -19,13 +19,15 @@ export default function Dashboard({ monthKey, setPage }) {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    loadSummary()
+    seedAndLoad()
   }, [monthKey])
 
-  async function loadSummary() {
+  async function seedAndLoad() {
     setLoading(true)
     setError('')
     try {
+      // Ensure default buckets exist (idempotent)
+      await api.seedBuckets()
       const data = await api.getMonthSummary(monthKey)
       setSummary(data)
     } catch (err) {

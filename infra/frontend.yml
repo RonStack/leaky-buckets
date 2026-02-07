@@ -7,6 +7,16 @@ Parameters:
     Default: prod
     AllowedValues: [prod]
 
+  DomainName:
+    Type: String
+    Default: leakingbuckets.goronny.com
+    Description: Custom domain name for the frontend
+
+  AcmCertificateArn:
+    Type: String
+    Default: arn:aws:acm:us-east-1:123525499627:certificate/6b03975e-2c39-4656-8358-94dbbe6003b4
+    Description: ACM certificate ARN for the custom domain (must be in us-east-1)
+
 Resources:
   # -------------------------------------------------------
   # S3 — static site bucket (private, accessed via CloudFront)
@@ -48,6 +58,12 @@ Resources:
         Enabled: true
         Comment: !Sub "Leaky Buckets (${Environment})"
         DefaultRootObject: index.html
+        Aliases:
+          - !Ref DomainName
+        ViewerCertificate:
+          AcmCertificateArn: !Ref AcmCertificateArn
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
         Origins:
           - Id: S3Origin
             DomainName: !GetAtt FrontendBucket.RegionalDomainName

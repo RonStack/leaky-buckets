@@ -4,11 +4,13 @@ import LoginPage from './pages/LoginPage'
 import Dashboard from './pages/Dashboard'
 import UploadPage from './pages/UploadPage'
 import ReviewPage from './pages/ReviewPage'
+import SettingsPage from './pages/SettingsPage'
 
 const PAGES = {
   dashboard: Dashboard,
   upload: UploadPage,
   review: ReviewPage,
+  settings: SettingsPage,
 }
 
 export default function App() {
@@ -46,6 +48,12 @@ export default function App() {
             onClick={() => setPage('review')}
           >
             Review
+          </button>
+          <button
+            className={page === 'settings' ? 'active' : ''}
+            onClick={() => setPage('settings')}
+          >
+            Settings
           </button>
         </nav>
         <div className="header-right">

@@ -37,7 +37,7 @@ export default function ReviewPage({ monthKey, setPage }) {
 
   async function handleCategorize(txnId, bucket, remember) {
     try {
-      await api.updateTransaction(txnId, bucket, remember)
+      await api.updateTransaction(txnId, bucket, remember, monthKey)
       await loadTransactions() // Refresh
     } catch (err) {
       setError(err.message)

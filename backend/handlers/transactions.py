@@ -90,19 +90,30 @@ def _update_transaction(event):
     try:
         table = transactions_table()
 
-        # We need the full key (pk + sk) to update — scan for the txn by ID
-        # In practice we'd pass pk+sk from frontend; for now do a targeted query
-        items = query_items(
-            table,
-            Key("monthKey").begins_with("") & Key("sk").begins_with(f"TXN#"),
-            index_name="byMonth",
-        )
-        # Find matching transaction
+        # Query the byMonth GSI using monthKey from the request body
+        month_key = body.get("monthKey")
         target = None
-        for item in items:
-            if item.get("transactionId") == txn_id:
-                target = item
-                break
+
+        if month_key:
+            # Efficient: query the GSI for this month, then find the txn
+            items = query_items(
+                table,
+                Key("monthKey").eq(month_key),
+                index_name="byMonth",
+                limit=2000,
+            )
+            for item in items:
+                if item.get("transactionId") == txn_id:
+                    target = item
+                    break
+        else:
+            # Fallback: scan (handles older clients)
+            from lib.db import scan_all
+            all_txns = scan_all(table)
+            for item in all_txns:
+                if item.get("transactionId") == txn_id:
+                    target = item
+                    break
 
         if not target:
             return not_found(f"Transaction {txn_id} not found")
