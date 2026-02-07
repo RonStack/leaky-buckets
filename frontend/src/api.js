@@ -32,6 +32,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ fileName, source, csvContent }),
     }),
+  uploadFile: (fileName, source, fileContent) =>
+    request('/upload', {
+      method: 'POST',
+      body: JSON.stringify({ fileName, source, fileContent }),
+    }),
 
   // Transactions
   getTransactions: (monthKey) => request(`/transactions?monthKey=${monthKey}`),
@@ -63,10 +68,10 @@ export const api = {
     }),
 
   // Paystubs (The Faucet 🚰)
-  uploadPaystub: (fileName, source, pdfContent) =>
+  uploadPaystub: (fileName, source, fileContent) =>
     request('/paystub', {
       method: 'POST',
-      body: JSON.stringify({ fileName, source, pdfContent }),
+      body: JSON.stringify({ fileName, source, fileContent }),
     }),
   getPaystubs: (monthKey) => request(`/paystub?monthKey=${monthKey}`),
   updatePaystub: (paystubId, updates) =>

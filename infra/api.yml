@@ -145,7 +145,8 @@ Resources:
       Handler: handlers/upload.handler
       CodeUri: ../backend/
       Role: !GetAtt LambdaRole.Arn
-      Timeout: 60
+      Timeout: 90
+      MemorySize: 512
       Events:
         Post:
           Type: Api

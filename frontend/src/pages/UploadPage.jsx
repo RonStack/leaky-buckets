@@ -2,10 +2,13 @@ import React, { useState, useCallback } from 'react'
 import { api } from '../api'
 
 const SOURCES = {
-  bank: { label: '🏦 Bank Statement', accept: '.csv', type: 'csv' },
-  credit_card: { label: '💳 Credit Card', accept: '.csv', type: 'csv' },
-  paystub: { label: '📄 Paystub', accept: '.pdf', type: 'pdf' },
+  bank: { label: '🏦 Bank Statement' },
+  credit_card: { label: '💳 Credit Card' },
+  paystub: { label: '📄 Paystub' },
 }
+
+const ACCEPTED_EXTENSIONS = ['.csv', '.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp']
+const ACCEPTED_STRING = ACCEPTED_EXTENSIONS.join(',')
 
 export default function UploadPage({ monthKey, setPage }) {
   const [file, setFile] = useState(null)
@@ -18,19 +21,30 @@ export default function UploadPage({ monthKey, setPage }) {
   const [error, setError] = useState('')
 
   const isPaystub = source === 'paystub'
-  const fileExt = isPaystub ? '.pdf' : '.csv'
+
+  function getFileType(file) {
+    if (!file) return null
+    const ext = file.name.split('.').pop().toLowerCase()
+    if (ext === 'csv') return 'csv'
+    if (ext === 'pdf') return 'pdf'
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) return 'image'
+    return null
+  }
 
   const handleDrop = useCallback((e) => {
     e.preventDefault()
     setDragging(false)
     const f = e.dataTransfer.files[0]
-    if (f && f.name.toLowerCase().endsWith(fileExt)) {
-      setFile(f)
-      setError('')
-    } else {
-      setError(`Please drop a ${fileExt} file`)
+    if (f) {
+      const ext = f.name.split('.').pop().toLowerCase()
+      if (ACCEPTED_EXTENSIONS.some(a => a.slice(1) === ext)) {
+        setFile(f)
+        setError('')
+      } else {
+        setError('Unsupported file type. Use CSV, PDF, or image (PNG/JPG).')
+      }
     }
-  }, [fileExt])
+  }, [])
 
   const handleFileSelect = (e) => {
     const f = e.target.files[0]
@@ -48,6 +62,13 @@ export default function UploadPage({ monthKey, setPage }) {
     setError('')
   }
 
+  async function readFileAsBase64(f) {
+    const arrayBuffer = await f.arrayBuffer()
+    return btoa(
+      new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+    )
+  }
+
   async function handleUpload() {
     if (!file) return
     setUploading(true)
@@ -55,19 +76,25 @@ export default function UploadPage({ monthKey, setPage }) {
     setResult(null)
     setPaystubResult(null)
 
+    const fileType = getFileType(file)
+
     try {
       if (isPaystub) {
-        // Read PDF as base64
-        const arrayBuffer = await file.arrayBuffer()
-        const base64 = btoa(
-          new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-        )
+        // Paystub: PDF or image → base64 → paystub endpoint
+        const base64 = await readFileAsBase64(file)
         const data = await api.uploadPaystub(file.name, paystubSource || 'Primary Job', base64)
         setPaystubResult(data)
         setFile(null)
-      } else {
+      } else if (fileType === 'csv') {
+        // Statement CSV: read as text → upload endpoint
         const text = await file.text()
         const data = await api.upload(file.name, source, text)
+        setResult(data)
+        setFile(null)
+      } else {
+        // Statement PDF/image: read as base64 → upload endpoint
+        const base64 = await readFileAsBase64(file)
+        const data = await api.uploadFile(file.name, source, base64)
         setResult(data)
         setFile(null)
       }
@@ -119,7 +146,7 @@ export default function UploadPage({ monthKey, setPage }) {
         <input
           id="file-input"
           type="file"
-          accept={SOURCES[source].accept}
+          accept={ACCEPTED_STRING}
           onChange={handleFileSelect}
           hidden
           key={source} // Reset input when source changes
@@ -133,7 +160,7 @@ export default function UploadPage({ monthKey, setPage }) {
         ) : (
           <div className="drop-prompt">
             <div className="drop-icon">{isPaystub ? '📄' : '📂'}</div>
-            <div>Drop your {isPaystub ? 'PDF paystub' : 'CSV statement'} here, or click to browse</div>
+            <div>Drop your {isPaystub ? 'paystub' : 'statement'} here (CSV, PDF, or image)</div>
           </div>
         )}
       </div>
@@ -147,7 +174,7 @@ export default function UploadPage({ monthKey, setPage }) {
           disabled={uploading}
         >
           {uploading
-            ? (isPaystub ? 'Parsing paystub with AI... 🤖' : 'Processing... 🔄')
+            ? (isPaystub ? 'Parsing paystub with AI... 🤖' : (getFileType(file) === 'csv' ? 'Processing... 🔄' : 'Extracting transactions with AI... 🤖'))
             : `Upload ${SOURCES[source].label}`}
         </button>
       )}

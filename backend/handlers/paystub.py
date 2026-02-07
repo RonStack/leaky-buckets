@@ -18,7 +18,7 @@ from boto3.dynamodb.conditions import Key
 
 from lib.response import ok, bad_request, not_found, server_error
 from lib.db import put_item, get_item, query_items, update_item, delete_item, scan_all
-from lib.paystub_parser import parse_paystub_pdf
+from lib.paystub_parser import parse_paystub
 
 s3 = boto3.client("s3")
 BUCKET = os.environ.get("UPLOADS_BUCKET", "")
@@ -47,18 +47,19 @@ def handler(event, context):
 
 
 def _upload_paystub(event):
-    """Parse a paystub PDF and store the extracted data."""
+    """Parse a paystub PDF or image and store the extracted data."""
     try:
         body = json.loads(event.get("body") or "{}")
     except json.JSONDecodeError:
         return bad_request("Invalid JSON body")
 
-    pdf_base64 = body.get("pdfContent", "")
+    # Support both old pdfContent and new fileContent field names
+    file_base64 = body.get("fileContent", "") or body.get("pdfContent", "")
     source_name = body.get("source", "Primary Job")
     file_name = body.get("fileName", "paystub.pdf")
 
-    if not pdf_base64:
-        return bad_request("pdfContent (base64-encoded PDF) is required")
+    if not file_base64:
+        return bad_request("fileContent (base64-encoded PDF or image) is required")
 
     claims = (event.get("requestContext", {})
               .get("authorizer", {})
@@ -69,17 +70,26 @@ def _upload_paystub(event):
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     try:
-        # 1. Store raw PDF in S3
+        # 1. Store raw file in S3
+        ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else "pdf"
+        content_types = {
+            "pdf": "application/pdf",
+            "png": "image/png",
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg",
+            "gif": "image/gif",
+            "webp": "image/webp",
+        }
         raw_key = f"uploads/paystubs/{user_id}/{paystub_id}/{file_name}"
         s3.put_object(
             Bucket=BUCKET,
             Key=raw_key,
-            Body=base64.b64decode(pdf_base64),
-            ContentType="application/pdf",
+            Body=base64.b64decode(file_base64),
+            ContentType=content_types.get(ext, "application/octet-stream"),
         )
 
         # 2. Parse with OpenAI
-        parsed = parse_paystub_pdf(pdf_base64)
+        parsed = parse_paystub(file_base64, file_name)
 
         # 3. Derive month key from pay date
         pay_date = parsed.get("payDate", "")

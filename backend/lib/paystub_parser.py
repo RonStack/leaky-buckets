@@ -1,11 +1,9 @@
 """
-Paystub Parser — PDF → text extraction → OpenAI GPT-4o → structured income data.
+Paystub Parser — PDF/image → OpenAI GPT-4o → structured income data.
 
 Flow:
-1. Receive PDF as base64
-2. Extract text from PDF using pypdf
-3. Send text to OpenAI GPT-4o for structured extraction
-4. Return structured paystub data
+- PDF: Extract text with pypdf → send text to GPT-4o
+- Image (PNG/JPG/etc): Send directly to GPT-4o vision
 
 All deduction categories:
 - Federal Tax
@@ -23,7 +21,6 @@ import logging
 import io
 
 from openai import OpenAI
-from pypdf import PdfReader
 
 logger = logging.getLogger(__name__)
 
@@ -37,68 +34,83 @@ DEDUCTION_CATEGORIES = [
     "otherDeductions",
 ]
 
+IMAGE_MIMES = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "webp": "image/webp",
+}
 
-def parse_paystub_pdf(pdf_base64: str) -> dict:
+
+def parse_paystub(file_base64: str, file_name: str = "paystub.pdf") -> dict:
     """
-    Parse a paystub PDF using text extraction + OpenAI GPT-4o.
+    Parse a paystub from PDF or image using OpenAI GPT-4o.
 
     Args:
-        pdf_base64: base64-encoded PDF content
+        file_base64: base64-encoded file content
+        file_name: original file name (used to detect format)
 
     Returns:
-        {
-            "grossPay": 5000.00,
-            "netPay": 3200.00,
-            "payDate": "2026-01-15",
-            "employer": "Acme Corp",
-            "federalTax": 600.00,
-            ...
-        }
+        { "grossPay": ..., "netPay": ..., ... }
     """
     api_key = os.environ.get("OPENAI_API_KEY", "")
     if not api_key or api_key == "PLACEHOLDER_UPDATE_ME":
         raise ValueError("OpenAI API key not configured — required for paystub parsing")
 
-    # Extract text from PDF
-    pdf_text = _extract_pdf_text(pdf_base64)
+    ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+
+    if ext == "pdf":
+        return _parse_pdf_paystub(file_base64, api_key)
+    elif ext in IMAGE_MIMES:
+        return _parse_image_paystub(file_base64, ext, api_key)
+    else:
+        raise ValueError(f"Unsupported paystub format: .{ext}. Use PDF or image (PNG/JPG).")
+
+
+# Keep backward compatibility
+def parse_paystub_pdf(pdf_base64: str) -> dict:
+    """Legacy wrapper — parse PDF paystub."""
+    return parse_paystub(pdf_base64, "paystub.pdf")
+
+
+def _parse_pdf_paystub(pdf_base64: str, api_key: str) -> dict:
+    """Extract paystub data from a PDF via text extraction + GPT-4o."""
+    from pypdf import PdfReader
+
+    pdf_bytes = base64.b64decode(pdf_base64)
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+
+    all_text = []
+    for page in reader.pages[:4]:
+        text = page.extract_text()
+        if text:
+            all_text.append(text)
+
+    pdf_text = "\n\n--- Page Break ---\n\n".join(all_text)
 
     if not pdf_text or len(pdf_text.strip()) < 50:
         raise ValueError(
             "Could not extract readable text from this PDF. "
             "The paystub may be image-based (scanned). "
-            "Please try a digitally-generated PDF from your payroll provider."
+            "Try uploading a screenshot/image of the paystub instead."
         )
 
     logger.info(f"Extracted {len(pdf_text)} chars of text from PDF")
-
-    # Send text to OpenAI for structured extraction
-    result = _extract_with_openai(api_key, pdf_text)
-    return result
+    return _extract_from_text(api_key, pdf_text)
 
 
-def _extract_pdf_text(pdf_base64: str) -> str:
-    """Extract text content from a PDF using pypdf."""
-    pdf_bytes = base64.b64decode(pdf_base64)
-    reader = PdfReader(io.BytesIO(pdf_bytes))
-
-    all_text = []
-    for page in reader.pages[:4]:  # Max 4 pages
-        text = page.extract_text()
-        if text:
-            all_text.append(text)
-
-    return "\n\n--- Page Break ---\n\n".join(all_text)
+def _parse_image_paystub(image_base64: str, ext: str, api_key: str) -> dict:
+    """Extract paystub data from an image via GPT-4o vision."""
+    mime = IMAGE_MIMES[ext]
+    return _extract_from_image(api_key, image_base64, mime)
 
 
-def _extract_with_openai(api_key: str, pdf_text: str) -> dict:
-    """Send paystub text to GPT-4o and extract structured data."""
-    client = OpenAI(api_key=api_key)
-
-    prompt = f"""You are a paystub parser. Extract the following information from this paystub text.
+_PAYSTUB_PROMPT = """You are a paystub parser. Extract the following information from this paystub.
 
 Return ONLY valid JSON with these exact fields (use 0.00 for any field not found):
 
-{{
+{
     "grossPay": <total gross pay for this pay period as a number>,
     "netPay": <net/take-home pay as a number>,
     "payDate": "<pay date in YYYY-MM-DD format>",
@@ -110,12 +122,12 @@ Return ONLY valid JSON with these exact fields (use 0.00 for any field not found
     "hsaFsa": <HSA + FSA contributions combined as a number>,
     "debtPayments": <401k loan repayments + other debt deductions as a number>,
     "otherDeductions": <any other deductions not in the above categories as a number>,
-    "details": {{
+    "details": {
         "lineItems": [
-            {{"name": "<deduction name>", "amount": <amount>, "category": "<which of the above categories>"}}
+            {"name": "<deduction name>", "amount": <amount>, "category": "<which of the above categories>"}
         ]
-    }}
-}}
+    }
+}
 
 Important:
 - All amounts should be for the CURRENT pay period only (not YTD)
@@ -127,19 +139,56 @@ Important:
 - hsaFsa = Health Savings Account + Flexible Spending Account
 - debtPayments = 401k Loan + any loan repayments deducted from pay
 - otherDeductions = dental, vision, life insurance, disability, union dues, etc.
-- Return ONLY the JSON, no markdown fences or extra text
+- Return ONLY the JSON, no markdown fences or extra text"""
 
---- PAYSTUB TEXT ---
-{pdf_text}
---- END ---"""
+
+def _extract_from_text(api_key: str, text: str) -> dict:
+    """Send paystub text to GPT-4o and extract structured data."""
+    client = OpenAI(api_key=api_key)
 
     response = client.chat.completions.create(
         model="gpt-4o",
-        messages=[{"role": "user", "content": prompt}],
+        messages=[
+            {"role": "system", "content": _PAYSTUB_PROMPT},
+            {"role": "user", "content": f"Extract paystub data from this text:\n\n{text}"},
+        ],
         temperature=0,
         max_tokens=1500,
     )
 
+    return _parse_paystub_response(response)
+
+
+def _extract_from_image(api_key: str, image_base64: str, mime_type: str) -> dict:
+    """Send paystub image to GPT-4o vision and extract structured data."""
+    client = OpenAI(api_key=api_key)
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": f"{_PAYSTUB_PROMPT}\n\nExtract paystub data from this image:"},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type};base64,{image_base64}",
+                            "detail": "high",
+                        },
+                    },
+                ],
+            }
+        ],
+        temperature=0,
+        max_tokens=1500,
+    )
+
+    return _parse_paystub_response(response)
+
+
+def _parse_paystub_response(response) -> dict:
+    """Parse GPT response into structured paystub data."""
     raw = response.choices[0].message.content.strip()
 
     # Strip markdown code fences if present
