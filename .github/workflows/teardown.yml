@@ -31,6 +31,23 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       # Delete in reverse dependency order
+      - name: Empty frontend bucket
+        run: |
+          BUCKET=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_PREFIX }}-frontend-${{ env.ENVIRONMENT }} \
+            --query "Stacks[0].Outputs[?OutputKey=='FrontendBucketName'].OutputValue" \
+            --output text 2>/dev/null || echo "")
+          if [ -n "$BUCKET" ] && [ "$BUCKET" != "None" ]; then
+            aws s3 rm s3://$BUCKET --recursive || true
+          fi
+
+      - name: Delete Frontend stack
+        run: |
+          aws cloudformation delete-stack \
+            --stack-name ${{ env.STACK_PREFIX }}-frontend-${{ env.ENVIRONMENT }}
+          aws cloudformation wait stack-delete-complete \
+            --stack-name ${{ env.STACK_PREFIX }}-frontend-${{ env.ENVIRONMENT }} || true
+
       - name: Delete API stack
         run: |
           aws cloudformation delete-stack \

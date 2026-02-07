@@ -192,6 +192,12 @@ Resources:
             RestApiId: !Ref Api
             Path: /buckets/{bucketId}
             Method: PUT
+        Seed:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /buckets/seed
+            Method: POST
 
   MonthFunction:
     Type: AWS::Serverless::Function
