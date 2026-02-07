@@ -83,7 +83,7 @@ export default function Dashboard({ monthKey, setPage }) {
         <>
           <div className="bucket-grid">
             {summary.buckets.map((bucket) => (
-              <BucketCard key={bucket.bucketId} bucket={bucket} />
+              <BucketCard key={bucket.bucketId} bucket={bucket} onSetPage={setPage} />
             ))}
           </div>
 
@@ -100,7 +100,7 @@ export default function Dashboard({ monthKey, setPage }) {
   )
 }
 
-function BucketCard({ bucket }) {
+function BucketCard({ bucket, onSetPage }) {
   const pct = bucket.target > 0
     ? Math.min(Math.round((bucket.spent / bucket.target) * 100), 150)
     : 0
@@ -113,7 +113,7 @@ function BucketCard({ bucket }) {
       </div>
       <h3 className="bucket-name">{bucket.name}</h3>
       <div className="bucket-amount">${bucket.spent.toLocaleString()}</div>
-      {bucket.target > 0 && (
+      {bucket.target > 0 ? (
         <>
           <div className="bucket-target">of ${bucket.target.toLocaleString()}</div>
           <div className="bucket-bar">
@@ -123,6 +123,14 @@ function BucketCard({ bucket }) {
             />
           </div>
         </>
+      ) : (
+        <div
+          className="bucket-no-target"
+          onClick={() => onSetPage('settings')}
+          title="Set a monthly target in Settings"
+        >
+          No target set
+        </div>
       )}
       <div className="bucket-status-label">{STATUS_LABEL[bucket.status]}</div>
       <div className="bucket-count">{bucket.count} transaction{bucket.count !== 1 ? 's' : ''}</div>
