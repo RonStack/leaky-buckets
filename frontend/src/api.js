@@ -76,6 +76,18 @@ export const api = {
       body: JSON.stringify({ confirmation: 'DELETE' }),
     }),
 
+  // Delete month data
+  deleteExpenses: (monthKey) =>
+    request(`/month/${monthKey}/expenses`, {
+      method: 'DELETE',
+      body: JSON.stringify({ confirmation: 'DELETE' }),
+    }),
+  deleteIncome: (monthKey) =>
+    request(`/month/${monthKey}/income`, {
+      method: 'DELETE',
+      body: JSON.stringify({ confirmation: 'DELETE' }),
+    }),
+
   // Paystubs (The Faucet 🚰)
   uploadPaystub: (fileName, source, fileContent) =>
     request('/paystub', {

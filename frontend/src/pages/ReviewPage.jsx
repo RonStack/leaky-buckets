@@ -17,6 +17,7 @@ export default function ReviewPage({ monthKey, setPage }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [lockLoading, setLockLoading] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState('')
 
   useEffect(() => {
     loadTransactions()
@@ -44,6 +45,36 @@ export default function ReviewPage({ monthKey, setPage }) {
     }
   }
 
+  async function handleDeleteExpenses() {
+    const label = getMonthLabel(monthKey)
+    if (!window.confirm(`Delete ALL expense transactions for ${label}?\n\nThis cannot be undone.`)) return
+    setDeleteLoading('expenses')
+    try {
+      const result = await api.deleteExpenses(monthKey)
+      alert(`✅ ${result.message}`)
+      await loadTransactions()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDeleteLoading('')
+    }
+  }
+
+  async function handleDeleteIncome() {
+    const label = getMonthLabel(monthKey)
+    if (!window.confirm(`Delete ALL income/paystub data for ${label}?\n\nThis cannot be undone.`)) return
+    setDeleteLoading('income')
+    try {
+      const result = await api.deleteIncome(monthKey)
+      alert(`✅ ${result.message}`)
+      setPage('dashboard')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDeleteLoading('')
+    }
+  }
+
   async function handleLock() {
     if (!window.confirm(`Lock ${monthKey}? Transactions will become immutable.`)) return
     setLockLoading(true)
@@ -67,13 +98,33 @@ export default function ReviewPage({ monthKey, setPage }) {
     <div className="review-page">
       <div className="review-header">
         <h2>Review — {getMonthLabel(monthKey)}</h2>
-        <div className="review-stats">
-          <span>{total} total</span>
-          <span className={needsReview.length > 0 ? 'needs-attention' : 'all-good'}>
-            {needsReview.length > 0
-              ? `⚡ ${needsReview.length} need attention`
-              : '✅ All categorized!'}
-          </span>
+        <div className="review-header-row">
+          <div className="review-stats">
+            <span>{total} total</span>
+            <span className={needsReview.length > 0 ? 'needs-attention' : 'all-good'}>
+              {needsReview.length > 0
+                ? `⚡ ${needsReview.length} need attention`
+                : '✅ All categorized!'}
+            </span>
+          </div>
+          <div className="review-delete-actions">
+            <button
+              className="delete-month-btn"
+              onClick={handleDeleteExpenses}
+              disabled={!!deleteLoading}
+              title="Delete all expense transactions for this month"
+            >
+              {deleteLoading === 'expenses' ? 'Deleting...' : '🗑️ Delete Expenses'}
+            </button>
+            <button
+              className="delete-month-btn"
+              onClick={handleDeleteIncome}
+              disabled={!!deleteLoading}
+              title="Delete all income/paystub data for this month"
+            >
+              {deleteLoading === 'income' ? 'Deleting...' : '🗑️ Delete Income'}
+            </button>
+          </div>
         </div>
       </div>
 

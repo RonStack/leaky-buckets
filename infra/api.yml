@@ -223,6 +223,18 @@ Resources:
             RestApiId: !Ref Api
             Path: /month/{monthKey}/lock
             Method: POST
+        DeleteExpenses:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /month/{monthKey}/expenses
+            Method: DELETE
+        DeleteIncome:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /month/{monthKey}/income
+            Method: DELETE
 
   PaystubFunction:
     Type: AWS::Serverless::Function

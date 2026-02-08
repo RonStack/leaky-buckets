@@ -828,20 +828,51 @@ body {
 
 .review-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
+  margin-bottom: 20px;
 }
 
 .review-header h2 { font-size: 1.5rem; }
+
+.review-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
 
 .review-stats {
   display: flex;
   gap: 16px;
   font-size: 0.9rem;
   color: var(--text-muted);
+}
+
+.review-delete-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.delete-month-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.delete-month-btn:hover {
+  border-color: var(--red);
+  color: var(--red);
+  background: rgba(239, 83, 80, 0.06);
+}
+.delete-month-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .needs-attention { color: #e6a800; font-weight: 600; }
