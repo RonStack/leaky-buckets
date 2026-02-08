@@ -66,7 +66,7 @@ leaky-buckets/
 │   │   ├── transactions.py # GET /transactions, PUT /transactions/{id}
 │   │   └── upload.py       # POST /upload (CSV, PDF, or image)
 │   ├── lib/
-│   │   ├── categorizer.py  # Merchant memory (DynamoDB) → OpenAI GPT-4o-mini fallback
+│   │   ├── categorizer.py  # Merchant memory (DynamoDB) → OpenAI GPT-4o-mini batch (dedup + chunked)
 │   │   ├── db.py           # DynamoDB helpers (put/get/query/update/delete/scan/batch)
 │   │   ├── normalizer.py   # CSV → normalized transaction format
 │   │   ├── paystub_parser.py   # PDF/image paystub → GPT-4o → structured income data
@@ -146,7 +146,7 @@ leaky-buckets/
 1. Frontend reads CSV as text → `POST /upload { csvContent, source, fileName }`
 2. Lambda stores raw CSV in S3
 3. `normalizer.py` parses CSV → normalized transactions
-4. `categorizer.py` categorizes each transaction (merchant memory first, then OpenAI GPT-4o-mini)
+4. `categorizer.py` categorizes transactions: merchant memory first (DynamoDB lookup), then remaining unique descriptions sent to OpenAI GPT-4o-mini in batches of 20
 5. Transactions stored in DynamoDB with bucket assignment + confidence score
 
 ### Statement Upload (PDF/Image)
@@ -180,7 +180,7 @@ leaky-buckets/
 - **Month-scoping:** Transactions and paystubs are scoped by `monthKey` (e.g., "2026-01"). The frontend has a month picker that drives all data queries.
 - **OpenAI models:** GPT-4o-mini for merchant categorization (cheap, fast), GPT-4o for paystub/statement parsing (more capable, handles complex layouts).
 - **No PyMuPDF:** We tried PyMuPDF for PDF→image conversion but it requires native C libraries incompatible with Lambda arm64. Switched to `pypdf` (pure Python text extraction). Image-based/scanned PDFs won't work with text extraction — users should upload those as screenshots instead.
-- **API Gateway 29s timeout:** REST API has a hard 29-second integration timeout. Lambda timeouts are set higher (60-90s) but the client may get a 504 if AI parsing takes too long. For most digital paystubs/statements this isn't an issue.
+- **API Gateway 29s timeout:** REST API has a hard 29-second integration timeout. Lambda timeouts are set higher (60-90s) but the client may get a 504 if AI parsing takes too long. The frontend handles this gracefully — shows "Upload received!" and directs users to check Dashboard/Review in a minute. The Lambda finishes in the background and data lands in DynamoDB.
 - **IAM wildcard:** Lambda role uses `arn:aws:dynamodb:*:*:table/lb-*-prod` so new tables don't need explicit IAM policy updates.
 
 ---

@@ -102,9 +102,11 @@ export default function Dashboard({ monthKey, setPage }) {
         <>
           {hasTransactions && (
             <div className="bucket-grid">
-              {summary.buckets.map((bucket) => (
-                <BucketCard key={bucket.bucketId} bucket={bucket} onSetPage={setPage} />
-              ))}
+              {[...summary.buckets]
+                .sort((a, b) => b.spent - a.spent)
+                .map((bucket, idx) => (
+                  <BucketCard key={bucket.bucketId} bucket={bucket} rank={idx} onSetPage={setPage} />
+                ))}
             </div>
           )}
 
@@ -200,6 +202,13 @@ function FaucetSection({ income }) {
       </div>
 
       <div className="faucet-flow-arrow faucet-into-buckets">▼ flows into your buckets ▼</div>
+
+      {/* Drip animation */}
+      <div className="drip-container">
+        <div className="drip drip-1" />
+        <div className="drip drip-2" />
+        <div className="drip drip-3" />
+      </div>
     </div>
   )
 }
@@ -235,40 +244,64 @@ function WaterfallRow({ row, gross }) {
   )
 }
 
-function BucketCard({ bucket, onSetPage }) {
+function BucketCard({ bucket, rank, onSetPage }) {
   const pct = bucket.target > 0
     ? Math.min(Math.round((bucket.spent / bucket.target) * 100), 150)
     : 0
+  const fillHeight = bucket.target > 0 ? Math.min(pct, 100) : Math.min(bucket.spent / 10, 80)
+
+  // Water color based on status
+  const waterColor = bucket.status === 'overflowing'
+    ? 'rgba(239, 83, 80, 0.35)'
+    : bucket.status === 'dripping'
+      ? 'rgba(255, 193, 7, 0.3)'
+      : 'rgba(91, 141, 239, 0.25)'
+
+  const waterColorSolid = bucket.status === 'overflowing'
+    ? 'rgba(239, 83, 80, 0.55)'
+    : bucket.status === 'dripping'
+      ? 'rgba(255, 193, 7, 0.5)'
+      : 'rgba(91, 141, 239, 0.4)'
 
   return (
-    <div className={`bucket-card bucket-${bucket.status}`}>
-      <div className="bucket-header">
-        <span className="bucket-emoji">{bucket.emoji}</span>
-        <span className="bucket-status">{STATUS_EMOJI[bucket.status]}</span>
-      </div>
-      <h3 className="bucket-name">{bucket.name}</h3>
-      <div className="bucket-amount">${bucket.spent.toLocaleString()}</div>
-      {bucket.target > 0 ? (
-        <>
-          <div className="bucket-target">of ${bucket.target.toLocaleString()}</div>
-          <div className="bucket-bar">
-            <div
-              className="bucket-bar-fill"
-              style={{ width: `${Math.min(pct, 100)}%` }}
-            />
-          </div>
-        </>
-      ) : (
-        <div
-          className="bucket-no-target"
-          onClick={() => onSetPage('settings')}
-          title="Set a monthly target in Settings"
-        >
-          No target set
+    <div className={`bucket-card bucket-${bucket.status}`} style={{ '--water-height': `${fillHeight}%`, '--water-color': waterColor, '--water-color-solid': waterColorSolid, '--fill-delay': `${rank * 0.15}s` }}>
+      {/* Overflow drips */}
+      {bucket.status === 'overflowing' && (
+        <div className="bucket-overflow-drips">
+          <div className="overflow-drip overflow-drip-1" />
+          <div className="overflow-drip overflow-drip-2" />
         </div>
       )}
-      <div className="bucket-status-label">{STATUS_LABEL[bucket.status]}</div>
-      <div className="bucket-count">{bucket.count} transaction{bucket.count !== 1 ? 's' : ''}</div>
+
+      {/* Water fill */}
+      <div className="bucket-water">
+        <div className="bucket-water-surface" />
+      </div>
+
+      {/* Content on top of water */}
+      <div className="bucket-content">
+        <div className="bucket-header">
+          <span className="bucket-emoji">{bucket.emoji}</span>
+          <span className="bucket-status">{STATUS_EMOJI[bucket.status]}</span>
+        </div>
+        <h3 className="bucket-name">{bucket.name}</h3>
+        <div className="bucket-amount">${bucket.spent.toLocaleString()}</div>
+        {bucket.target > 0 ? (
+          <div className="bucket-target">of ${bucket.target.toLocaleString()} ({pct}%)</div>
+        ) : (
+          <div
+            className="bucket-no-target"
+            onClick={() => onSetPage('settings')}
+            title="Set a monthly target in Settings"
+          >
+            Set a target →
+          </div>
+        )}
+        <div className="bucket-footer">
+          <span className="bucket-status-label">{STATUS_LABEL[bucket.status]}</span>
+          <span className="bucket-count">{bucket.count} txn{bucket.count !== 1 ? 's' : ''}</span>
+        </div>
+      </div>
     </div>
   )
 }

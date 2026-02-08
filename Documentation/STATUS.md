@@ -1,6 +1,6 @@
 # Leaky-Buckets — Build Status
 
-> Last updated: 2026-02-07
+> Last updated: 2026-02-08
 
 ## Infrastructure (CI/CD Pipeline)
 
@@ -34,7 +34,7 @@
 | `db.py` — DynamoDB helpers | ✅ Done | Generic get/put/query/update/delete/batch/scan |
 | `response.py` — API response helpers | ✅ Done | CORS locked to `https://leakingbuckets.goronny.com` |
 | `normalizer.py` — CSV normalization | ✅ Done | Bank + credit card formats, strips account numbers |
-| `categorizer.py` — Merchant memory + AI | ✅ Done | DynamoDB merchant lookup → OpenAI GPT-4o-mini fallback |
+| `categorizer.py` — Merchant memory + AI | ✅ Done | DynamoDB merchant lookup → OpenAI GPT-4o-mini batch fallback (dedup + chunked, max 20/call) |
 | `paystub_parser.py` — Paystub parsing | ✅ Done | PDF text extraction (pypdf) or image vision (GPT-4o). Strips "Company Contributions" section. |
 | `statement_parser.py` — Statement parsing | ✅ Done | PDF text extraction or image vision → GPT-4o → transaction list |
 
@@ -46,8 +46,8 @@
 | Auth (Cognito login) | ✅ Done | `amazon-cognito-identity-js`, handles newPasswordRequired |
 | Dashboard — Faucet waterfall | ✅ Done | Shows gross pay → taxes → investing → debt → take-home |
 | Dashboard — Bucket grid | ✅ Done | Playful bucket states (🟢🟡🔴), auto-seeds buckets |
-| Upload page | ✅ Done | 3 source types (Bank, Credit Card, Paystub), accepts CSV/PDF/image |
-| Review page — Exceptions only | ✅ Done | Low confidence + uncategorized, remember merchant |
+| Upload page | ✅ Done | 3 source types (Bank, Credit Card, Paystub), accepts CSV/PDF/image, graceful 504 timeout handling |
+| Review page — Full review + edit | ✅ Done | Low confidence + uncategorized cards, all transactions have clickable editable buckets, remember merchant |
 | Settings — Bucket targets | ✅ Done | Edit monthly spending targets per bucket |
 | Settings — Delete all data | ✅ Done | Hard delete with typed "DELETE" confirmation |
 | Month picker | ✅ Done | Scopes all data to selected month |
@@ -82,6 +82,9 @@
 | PyMuPDF fails on Lambda arm64 | Switched to pypdf (pure Python text extraction) — no native C deps |
 | OpenAI rejects PDF as image | Removed vision-based PDF approach; extract text with pypdf, send text to GPT-4o |
 | Company Contributions in paystub | Strip text after "Company Contributions" before AI parsing (employer-paid, not deductions) |
+| Categorizer making N API calls per upload | Rewrote `categorize_batch` to deduplicate descriptions, chunk into groups of 20, and send batch prompts — reduced from ~54 API calls to ~3 |
+| 504 Gateway Timeout on PDF uploads | API Gateway has hard 29s limit; Lambda finishes in background. Frontend now catches 504/fetch errors and shows friendly "Upload received!" message |
+| Categorized transactions not editable | Added clickable bucket labels on all categorized transactions in Review page with inline dropdown + save/cancel |
 
 ## Remaining Work
 
@@ -89,3 +92,6 @@
 - [ ] Consider async processing for large PDF/image statement uploads (API Gateway 29s timeout)
 - [ ] Add ability to manually add/edit transactions
 - [ ] Add month-over-month comparison view
+- [x] Batch AI categorization (dedup + chunk) — reduced API calls from N to ~3
+- [x] Graceful 504 timeout handling on upload page
+- [x] Editable bucket assignment on all Review page transactions
