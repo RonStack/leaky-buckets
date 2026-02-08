@@ -94,9 +94,8 @@ def categorize_batch(transactions: list[dict]) -> list[dict]:
     """
     Categorize a list of transactions, adding bucket info to each.
 
-    Uses merchant memory first, then sends ALL remaining uncategorized
-    transactions to OpenAI in a single batch request (instead of one
-    API call per transaction).
+    Uses merchant memory first, deduplicates descriptions, then sends
+    unique descriptions to OpenAI in chunked batch requests.
     """
     # 1. Check merchant memory for each transaction
     table = merchants_table()
@@ -115,51 +114,87 @@ def categorize_batch(transactions: list[dict]) -> list[dict]:
         else:
             needs_ai.append((i, txn["description"]))
 
-    # 2. Batch-categorize everything that wasn't in merchant memory
-    if needs_ai:
-        ai_results = _ai_categorize_batch([desc for _, desc in needs_ai])
-        for (idx, desc), result in zip(needs_ai, ai_results):
-            transactions[idx]["bucket"] = result["bucket"]
-            transactions[idx]["confidence"] = result["confidence"]
-            transactions[idx]["categorization_source"] = result["source"]
-            transactions[idx]["categorization_reasoning"] = result["reasoning"]
+    if not needs_ai:
+        return transactions
+
+    # 2. Deduplicate — categorize each unique description only once
+    unique_descs = list(dict.fromkeys(desc for _, desc in needs_ai))
+    logger.info(
+        "Categorizing %d transactions (%d unique) via AI",
+        len(needs_ai), len(unique_descs),
+    )
+
+    # 3. Batch-categorize unique descriptions (chunked to avoid model dropping items)
+    desc_to_result = _ai_categorize_batch(unique_descs)
+
+    # 4. Apply results back to all transactions (including duplicates)
+    for idx, desc in needs_ai:
+        result = desc_to_result.get(desc, {
+            "bucket": None,
+            "confidence": 0.0,
+            "source": "ai_error",
+            "reasoning": "No AI result returned for this transaction.",
+        })
+        transactions[idx]["bucket"] = result["bucket"]
+        transactions[idx]["confidence"] = result["confidence"]
+        transactions[idx]["categorization_source"] = result["source"]
+        transactions[idx]["categorization_reasoning"] = result["reasoning"]
 
     return transactions
 
 
 # ---- OpenAI integration ----
 
-def _ai_categorize_batch(descriptions: list[str]) -> list[dict]:
+# Max descriptions per API call — keeps GPT-4o-mini from dropping items
+_CHUNK_SIZE = 20
+
+
+def _ai_categorize_batch(descriptions: list[str]) -> dict[str, dict]:
     """
-    Categorize multiple transaction descriptions in a single OpenAI call.
-    Falls back to one-at-a-time if the batch response can't be parsed.
+    Categorize multiple transaction descriptions via OpenAI.
+
+    Chunks the list into groups of _CHUNK_SIZE, sends each as a single
+    API call, and returns a dict mapping description -> result.
     """
     api_key = os.environ.get("OPENAI_API_KEY", "")
     if not api_key or api_key == "PLACEHOLDER_UPDATE_ME":
-        return [
-            {
-                "bucket": None,
-                "confidence": 0.0,
-                "source": "ai_unavailable",
-                "reasoning": "OpenAI API key not configured.",
-            }
-            for _ in descriptions
-        ]
+        empty = {
+            "bucket": None,
+            "confidence": 0.0,
+            "source": "ai_unavailable",
+            "reasoning": "OpenAI API key not configured.",
+        }
+        return {d: empty for d in descriptions}
 
     client = OpenAI(api_key=api_key)
+    results: dict[str, dict] = {}
 
-    # Build a numbered list of transactions for the prompt
+    # Process in chunks
+    for start in range(0, len(descriptions), _CHUNK_SIZE):
+        chunk = descriptions[start : start + _CHUNK_SIZE]
+        chunk_results = _ai_categorize_chunk(chunk, client)
+        results.update(chunk_results)
+
+    return results
+
+
+def _ai_categorize_chunk(descriptions: list[str], client: OpenAI) -> dict[str, dict]:
+    """
+    Categorize a chunk of descriptions in a single OpenAI call.
+    Returns a dict mapping description -> result.
+    Falls back to individual calls only for this chunk on failure.
+    """
     txn_list = "\n".join(
         f"{i + 1}. \"{desc}\"" for i, desc in enumerate(descriptions)
     )
 
-    prompt = f"""You are a personal finance categorizer. Categorize each transaction 
-into exactly ONE of these buckets:
+    prompt = f"""You are a personal finance categorizer. Categorize each of the following {len(descriptions)} transactions into exactly ONE of these buckets:
 
 {json.dumps(BUCKETS)}
 
-Respond with ONLY a valid JSON array. Each element must correspond to the 
-transaction at that index (same order, same count). Format:
+You MUST return EXACTLY {len(descriptions)} results — one for each transaction, in the same order.
+
+Respond with ONLY a valid JSON array:
 
 [
     {{"bucket": "<bucket name>", "confidence": <0.0 to 1.0>, "reasoning": "<one sentence>"}},
@@ -191,27 +226,35 @@ Transactions:
 
         if not isinstance(parsed, list) or len(parsed) != len(descriptions):
             logger.warning(
-                "AI batch returned %s items, expected %s — falling back to singles",
+                "AI chunk returned %s items, expected %s — falling back to singles for this chunk",
                 len(parsed) if isinstance(parsed, list) else "non-list",
                 len(descriptions),
             )
-            return [_ai_categorize_single(d, client) for d in descriptions]
+            return _ai_categorize_singles(descriptions, client)
 
-        # Validate and normalize each result
-        results = []
-        for item in parsed:
+        # Validate and map results back to descriptions
+        results = {}
+        for desc, item in zip(descriptions, parsed):
             if item.get("bucket") not in BUCKETS:
                 item["bucket"] = None
                 item["confidence"] = 0.0
                 item["reasoning"] = f"AI suggested unknown bucket. Original: {json.dumps(item)}"
             item["source"] = "ai"
-            results.append(item)
+            results[desc] = item
 
         return results
 
     except Exception as e:
-        logger.error("AI batch categorization failed: %s — falling back to singles", e)
-        return [_ai_categorize_single(d, client) for d in descriptions]
+        logger.error("AI chunk categorization failed: %s — falling back to singles", e)
+        return _ai_categorize_singles(descriptions, client)
+
+
+def _ai_categorize_singles(descriptions: list[str], client: OpenAI) -> dict[str, dict]:
+    """Categorize descriptions one-at-a-time (fallback). Returns dict mapping desc -> result."""
+    results = {}
+    for desc in descriptions:
+        results[desc] = _ai_categorize_single(desc, client)
+    return results
 
 
 def _ai_categorize_single(description: str, client: OpenAI) -> dict:
