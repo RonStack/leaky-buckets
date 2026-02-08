@@ -97,14 +97,11 @@ export default function ReviewPage({ monthKey, setPage }) {
           <h3>✅ Categorized ({categorized.length})</h3>
           <div className="transaction-list compact">
             {categorized.map((txn) => (
-              <div key={txn.transactionId || txn.sk} className="txn-row">
-                <span className="txn-date">{txn.date}</span>
-                <span className="txn-desc">{txn.description}</span>
-                <span className="txn-bucket">{txn.bucket}</span>
-                <span className={`txn-amount ${txn.amount < 0 ? 'negative' : 'positive'}`}>
-                  ${Math.abs(txn.amount).toLocaleString()}
-                </span>
-              </div>
+              <CategorizedRow
+                key={txn.transactionId || txn.sk}
+                txn={txn}
+                onCategorize={handleCategorize}
+              />
             ))}
           </div>
         </section>
@@ -122,6 +119,58 @@ export default function ReviewPage({ monthKey, setPage }) {
           </button>
         </div>
       )}
+    </div>
+  )
+}
+
+function CategorizedRow({ txn, onCategorize }) {
+  const [editing, setEditing] = useState(false)
+  const [selectedBucket, setSelectedBucket] = useState(txn.bucket || '')
+  const [saving, setSaving] = useState(false)
+
+  async function handleSave() {
+    if (!selectedBucket || selectedBucket === txn.bucket) {
+      setEditing(false)
+      return
+    }
+    setSaving(true)
+    await onCategorize(txn.transactionId, selectedBucket, false)
+    setSaving(false)
+    setEditing(false)
+  }
+
+  function handleCancel() {
+    setSelectedBucket(txn.bucket || '')
+    setEditing(false)
+  }
+
+  return (
+    <div className="txn-row">
+      <span className="txn-date">{txn.date}</span>
+      <span className="txn-desc">{txn.description}</span>
+      {editing ? (
+        <span className="txn-bucket-edit">
+          <select
+            value={selectedBucket}
+            onChange={(e) => setSelectedBucket(e.target.value)}
+          >
+            {BUCKETS.map((b) => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
+          <button className="inline-save-btn" onClick={handleSave} disabled={saving}>
+            {saving ? '...' : '✓'}
+          </button>
+          <button className="inline-cancel-btn" onClick={handleCancel}>✕</button>
+        </span>
+      ) : (
+        <span className="txn-bucket clickable" onClick={() => setEditing(true)} title="Click to change bucket">
+          {txn.bucket}
+        </span>
+      )}
+      <span className={`txn-amount ${txn.amount < 0 ? 'negative' : 'positive'}`}>
+        ${Math.abs(txn.amount).toLocaleString()}
+      </span>
     </div>
   )
 }

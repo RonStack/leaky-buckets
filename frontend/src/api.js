@@ -14,11 +14,20 @@ async function request(path, options = {}) {
   }
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers })
-  const data = await res.json()
 
   if (!res.ok) {
-    throw new Error(data.error || `Request failed: ${res.status}`)
+    let message = `Request failed: ${res.status}`
+    try {
+      const data = await res.json()
+      if (data.error) message = data.error
+    } catch {
+      // Non-JSON error body (e.g., 504 from API Gateway)
+      message = `${res.status} ${res.statusText || 'Gateway Timeout'}`
+    }
+    throw new Error(message)
   }
+
+  const data = await res.json()
   return data
 }
 

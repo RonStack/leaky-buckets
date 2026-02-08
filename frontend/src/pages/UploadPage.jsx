@@ -99,7 +99,18 @@ export default function UploadPage({ monthKey, setPage }) {
         setFile(null)
       }
     } catch (err) {
-      setError(err.message)
+      // 504 = API Gateway timeout, but Lambda keeps running and will finish.
+      // PDF/image parsing + AI categorization can take 30-60s.
+      if (err.message.includes('504') || err.message.includes('Failed to fetch') || err.message.includes('Load failed')) {
+        if (isPaystub) {
+          setPaystubResult({ timedOut: true })
+        } else {
+          setResult({ timedOut: true })
+        }
+        setFile(null)
+      } else {
+        setError(err.message)
+      }
     } finally {
       setUploading(false)
     }
@@ -182,24 +193,49 @@ export default function UploadPage({ monthKey, setPage }) {
       {/* CSV upload result */}
       {result && (
         <div className="upload-result">
-          <div className="result-icon">✅</div>
-          <h3>Upload complete!</h3>
-          <div className="result-stats">
-            <div className="result-stat">
-              <span className="result-value">{result.transactionsProcessed}</span>
-              <span>transactions processed</span>
-            </div>
-            <div className="result-stat">
-              <span className="result-value">{result.needsReview}</span>
-              <span>need review</span>
-            </div>
-            <div className="result-stat">
-              <span className="result-value">${Math.abs(result.totalAmount).toLocaleString()}</span>
-              <span>total</span>
-            </div>
-          </div>
+          {result.timedOut ? (
+            <>
+              <div className="result-icon">⏳</div>
+              <h3>Upload received!</h3>
+              <p className="result-processing-note">
+                Your file is being processed in the background. AI parsing and categorization
+                can take up to a minute for large statements.
+              </p>
+              <p className="result-processing-hint">
+                Head to the <strong>Dashboard</strong> or <strong>Review</strong> page in a minute or two to see your transactions.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="result-icon">✅</div>
+              <h3>Upload complete!</h3>
+              <div className="result-stats">
+                <div className="result-stat">
+                  <span className="result-value">{result.transactionsProcessed}</span>
+                  <span>transactions processed</span>
+                </div>
+                <div className="result-stat">
+                  <span className="result-value">{result.needsReview}</span>
+                  <span>need review</span>
+                </div>
+                <div className="result-stat">
+                  <span className="result-value">${Math.abs(result.totalAmount).toLocaleString()}</span>
+                  <span>total</span>
+                </div>
+              </div>
+            </>
+          )}
           <div className="result-actions">
-            {result.needsReview > 0 ? (
+            {result.timedOut ? (
+              <>
+                <button className="primary-btn" onClick={() => setPage('dashboard')}>
+                  View Dashboard →
+                </button>
+                <button className="secondary-btn" onClick={() => setPage('review')}>
+                  Go to Review →
+                </button>
+              </>
+            ) : result.needsReview > 0 ? (
               <button className="primary-btn" onClick={() => setPage('review')}>
                 Review {result.needsReview} items →
               </button>
@@ -218,61 +254,85 @@ export default function UploadPage({ monthKey, setPage }) {
       {/* Paystub result */}
       {paystubResult && (
         <div className="upload-result paystub-result">
-          <div className="result-icon">🚰</div>
-          <h3>Paystub parsed!</h3>
-          <p className="paystub-employer">{paystubResult.parsed.employer} — {paystubResult.parsed.payDate}</p>
-          <div className="paystub-breakdown">
-            <div className="paystub-line gross">
-              <span>🚰 Gross Pay</span>
-              <span className="paystub-amount">${paystubResult.parsed.grossPay.toLocaleString()}</span>
-            </div>
-            <div className="paystub-divider" />
-            <div className="paystub-line">
-              <span>🏛️ Federal Tax</span>
-              <span className="paystub-amount deduction">-${paystubResult.parsed.federalTax.toLocaleString()}</span>
-            </div>
-            <div className="paystub-line">
-              <span>🏛️ State Tax</span>
-              <span className="paystub-amount deduction">-${paystubResult.parsed.stateTax.toLocaleString()}</span>
-            </div>
-            <div className="paystub-line">
-              <span>🏛️ FICA / Medicare</span>
-              <span className="paystub-amount deduction">-${paystubResult.parsed.ficaMedicare.toLocaleString()}</span>
-            </div>
-            <div className="paystub-line">
-              <span>📈 Retirement (401k/IRA)</span>
-              <span className="paystub-amount deduction">-${paystubResult.parsed.retirement.toLocaleString()}</span>
-            </div>
-            <div className="paystub-line">
-              <span>🏥 HSA / FSA</span>
-              <span className="paystub-amount deduction">-${paystubResult.parsed.hsaFsa.toLocaleString()}</span>
-            </div>
-            {paystubResult.parsed.debtPayments > 0 && (
-              <div className="paystub-line">
-                <span>💳 Debt Payments</span>
-                <span className="paystub-amount deduction">-${paystubResult.parsed.debtPayments.toLocaleString()}</span>
+          {paystubResult.timedOut ? (
+            <>
+              <div className="result-icon">⏳</div>
+              <h3>Paystub received!</h3>
+              <p className="result-processing-note">
+                Your paystub is being parsed in the background. AI extraction
+                can take up to a minute for complex paystubs.
+              </p>
+              <p className="result-processing-hint">
+                Head to the <strong>Dashboard</strong> in a minute or two to see your income data.
+              </p>
+              <div className="result-actions">
+                <button className="primary-btn" onClick={() => setPage('dashboard')}>
+                  View Dashboard →
+                </button>
+                <button className="secondary-btn" onClick={() => { setPaystubResult(null); setFile(null) }}>
+                  Upload another paystub
+                </button>
               </div>
-            )}
-            {paystubResult.parsed.otherDeductions > 0 && (
-              <div className="paystub-line">
-                <span>📋 Other Deductions</span>
-                <span className="paystub-amount deduction">-${paystubResult.parsed.otherDeductions.toLocaleString()}</span>
+            </>
+          ) : (
+            <>
+              <div className="result-icon">🚰</div>
+              <h3>Paystub parsed!</h3>
+              <p className="paystub-employer">{paystubResult.parsed.employer} — {paystubResult.parsed.payDate}</p>
+              <div className="paystub-breakdown">
+                <div className="paystub-line gross">
+                  <span>🚰 Gross Pay</span>
+                  <span className="paystub-amount">${paystubResult.parsed.grossPay.toLocaleString()}</span>
+                </div>
+                <div className="paystub-divider" />
+                <div className="paystub-line">
+                  <span>🏛️ Federal Tax</span>
+                  <span className="paystub-amount deduction">-${paystubResult.parsed.federalTax.toLocaleString()}</span>
+                </div>
+                <div className="paystub-line">
+                  <span>🏛️ State Tax</span>
+                  <span className="paystub-amount deduction">-${paystubResult.parsed.stateTax.toLocaleString()}</span>
+                </div>
+                <div className="paystub-line">
+                  <span>🏛️ FICA / Medicare</span>
+                  <span className="paystub-amount deduction">-${paystubResult.parsed.ficaMedicare.toLocaleString()}</span>
+                </div>
+                <div className="paystub-line">
+                  <span>📈 Retirement (401k/IRA)</span>
+                  <span className="paystub-amount deduction">-${paystubResult.parsed.retirement.toLocaleString()}</span>
+                </div>
+                <div className="paystub-line">
+                  <span>🏥 HSA / FSA</span>
+                  <span className="paystub-amount deduction">-${paystubResult.parsed.hsaFsa.toLocaleString()}</span>
+                </div>
+                {paystubResult.parsed.debtPayments > 0 && (
+                  <div className="paystub-line">
+                    <span>💳 Debt Payments</span>
+                    <span className="paystub-amount deduction">-${paystubResult.parsed.debtPayments.toLocaleString()}</span>
+                  </div>
+                )}
+                {paystubResult.parsed.otherDeductions > 0 && (
+                  <div className="paystub-line">
+                    <span>📋 Other Deductions</span>
+                    <span className="paystub-amount deduction">-${paystubResult.parsed.otherDeductions.toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="paystub-divider" />
+                <div className="paystub-line net">
+                  <span>💧 Take-Home Pay</span>
+                  <span className="paystub-amount">${paystubResult.parsed.netPay.toLocaleString()}</span>
+                </div>
               </div>
-            )}
-            <div className="paystub-divider" />
-            <div className="paystub-line net">
-              <span>💧 Take-Home Pay</span>
-              <span className="paystub-amount">${paystubResult.parsed.netPay.toLocaleString()}</span>
-            </div>
-          </div>
-          <div className="result-actions">
-            <button className="primary-btn" onClick={() => setPage('dashboard')}>
-              View Dashboard →
-            </button>
-            <button className="secondary-btn" onClick={() => { setPaystubResult(null); setFile(null) }}>
-              Upload another paystub
-            </button>
-          </div>
+              <div className="result-actions">
+                <button className="primary-btn" onClick={() => setPage('dashboard')}>
+                  View Dashboard →
+                </button>
+                <button className="secondary-btn" onClick={() => { setPaystubResult(null); setFile(null) }}>
+                  Upload another paystub
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
