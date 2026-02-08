@@ -75,27 +75,47 @@ def _update_bucket(event):
 
 
 def _seed_buckets():
-    """Create default buckets if none exist. Idempotent."""
+    """Create default buckets if none exist, or add any missing ones."""
     try:
         table = buckets_table()
         existing = scan_all(table)
-        if existing:
-            return ok({"message": "Buckets already seeded", "count": len(existing)})
+        existing_names = {b["name"] for b in existing}
 
-        emojis = ["🏠", "🛒", "☕", "📱", "💊", "🚗", "🎉", "💥"]
-        buckets = []
+        emojis = ["🏠", "🛒", "🛍️", "☕", "📱", "💊", "🚗", "🎉", "💥"]
+
+        if not existing:
+            # First-time seed — create all buckets
+            buckets = []
+            for i, name in enumerate(DEFAULT_BUCKET_NAMES):
+                bucket = {
+                    "bucketId": str(uuid.uuid4()),
+                    "name": name,
+                    "emoji": emojis[i] if i < len(emojis) else "🪣",
+                    "monthlyTarget": 0,
+                    "displayOrder": i,
+                }
+                put_item(table, bucket)
+                buckets.append(bucket)
+            return ok({"message": "Buckets seeded", "buckets": buckets})
+
+        # Add any new buckets that don't exist yet
+        added = []
         for i, name in enumerate(DEFAULT_BUCKET_NAMES):
-            bucket = {
-                "bucketId": str(uuid.uuid4()),
-                "name": name,
-                "emoji": emojis[i] if i < len(emojis) else "🪣",
-                "monthlyTarget": 0,
-                "displayOrder": i,
-            }
-            put_item(table, bucket)
-            buckets.append(bucket)
+            if name not in existing_names:
+                bucket = {
+                    "bucketId": str(uuid.uuid4()),
+                    "name": name,
+                    "emoji": emojis[i] if i < len(emojis) else "🪣",
+                    "monthlyTarget": 0,
+                    "displayOrder": i,
+                }
+                put_item(table, bucket)
+                added.append(bucket)
 
-        return ok({"message": "Buckets seeded", "buckets": buckets})
+        if added:
+            return ok({"message": f"Added {len(added)} new bucket(s)", "added": added, "count": len(existing) + len(added)})
+
+        return ok({"message": "Buckets already seeded", "count": len(existing)})
 
     except Exception as e:
         return server_error(str(e))

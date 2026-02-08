@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 BUCKETS = [
     "Home & Utilities",
     "Groceries",
+    "Shopping",
     "Dining & Coffee",
     "Subscriptions",
     "Health",

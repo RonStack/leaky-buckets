@@ -4,6 +4,7 @@ import { api } from '../api'
 const BUCKETS = [
   'Home & Utilities',
   'Groceries',
+  'Shopping',
   'Dining & Coffee',
   'Subscriptions',
   'Health',
