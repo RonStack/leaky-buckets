@@ -30,7 +30,7 @@ Globals:
         CATEGORIES_TABLE: !ImportValue
           Fn::Sub: "lb-${Environment}-categories-table"
         TRANSACTIONS_TABLE: !ImportValue
-          Fn::Sub: "lb-${Environment}-transactions-table"
+          Fn::Sub: "lb-${Environment}-chest-transactions-table"
         KMS_KEY_ARN: !ImportValue
           Fn::Sub: "lb-${Environment}-kms-key-arn"
 
