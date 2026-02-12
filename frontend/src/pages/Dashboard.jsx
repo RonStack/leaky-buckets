@@ -6,6 +6,13 @@ function getCurrentMonthKey() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+/** Shift a "YYYY-MM" key by `delta` months (negative = past). */
+function shiftMonth(monthKey, delta) {
+  const [y, m] = monthKey.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 function formatDollars(cents) {
   const abs = Math.abs(cents)
   const sign = cents < 0 ? '-' : ''
@@ -23,11 +30,13 @@ function stateEmoji(state) {
 }
 
 export default function Dashboard({ navigate, refreshKey }) {
+  const [monthKey, setMonthKey] = useState(getCurrentMonthKey)
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const monthKey = getCurrentMonthKey()
+  const currentMonthKey = getCurrentMonthKey()
+  const isCurrentMonth = monthKey === currentMonthKey
 
   useEffect(() => {
     let cancelled = false
@@ -61,9 +70,26 @@ export default function Dashboard({ navigate, refreshKey }) {
 
   return (
     <div className="dashboard">
-      {/* Month header */}
+      {/* Month header with navigation */}
       <div className="month-header">
-        <h2>{monthLabel}</h2>
+        <div className="month-nav">
+          <button
+            className="month-nav-btn"
+            onClick={() => setMonthKey(shiftMonth(monthKey, -1))}
+            aria-label="Previous month"
+          >
+            ‹
+          </button>
+          <h2>{monthLabel}</h2>
+          <button
+            className="month-nav-btn"
+            onClick={() => setMonthKey(shiftMonth(monthKey, 1))}
+            disabled={isCurrentMonth}
+            aria-label="Next month"
+          >
+            ›
+          </button>
+        </div>
         <div className="month-totals">
           <span className="spent">{formatDollars(summary.totalSpentCents)} spent</span>
           <span className="sep">of</span>

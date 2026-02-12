@@ -253,9 +253,44 @@ html, body {
   margin-bottom: 20px;
 }
 
-.month-header h2 {
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.month-nav h2 {
   font-size: 1.3rem;
   color: var(--accent);
+  min-width: 180px;
+  text-align: center;
+}
+
+.month-nav-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 1.5rem;
+  line-height: 1;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.month-nav-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(212, 164, 74, 0.1);
+}
+
+.month-nav-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
 }
 
 .month-totals {
