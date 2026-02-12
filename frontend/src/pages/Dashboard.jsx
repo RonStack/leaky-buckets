@@ -13,15 +13,22 @@ const STATUS_LABEL = {
   overflowing: 'Overflowing!',
 }
 
-export default function Dashboard({ monthKey, setPage }) {
+export default function Dashboard({ monthKey, setPage, mode }) {
   const [summary, setSummary] = useState(null)
   const [income, setIncome] = useState(null)
+  const [liveData, setLiveData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  const isLive = mode === 'live'
+
   useEffect(() => {
-    seedAndLoad()
-  }, [monthKey])
+    if (isLive) {
+      loadLiveData()
+    } else {
+      seedAndLoad()
+    }
+  }, [monthKey, isLive])
 
   async function seedAndLoad() {
     setLoading(true)
@@ -45,8 +52,118 @@ export default function Dashboard({ monthKey, setPage }) {
     }
   }
 
+  async function loadLiveData() {
+    setLoading(true)
+    setError('')
+    try {
+      await api.seedBuckets()
+      const data = await api.getLiveExpenses(monthKey)
+      // Also load buckets for emoji/target data
+      const bucketData = await api.getBuckets()
+      const bucketList = bucketData.buckets || bucketData || []
+
+      // Merge live totals with bucket metadata
+      const bucketMap = {}
+      for (const b of bucketList) {
+        bucketMap[b.bucketId] = b
+      }
+
+      const liveBuckets = bucketList.map(b => {
+        const liveTot = (data.bucketTotals || []).find(t => t.bucketId === b.bucketId)
+        const spent = liveTot ? liveTot.total : 0
+        const count = liveTot ? liveTot.count : 0
+        const target = b.target || 0
+        let status = 'stable'
+        if (target > 0) {
+          const pct = spent / target
+          if (pct >= 1) status = 'overflowing'
+          else if (pct >= 0.7) status = 'dripping'
+        }
+        return {
+          bucketId: b.bucketId,
+          name: b.name,
+          emoji: b.emoji,
+          target,
+          spent: Math.round(spent * 100) / 100,
+          count,
+          status,
+        }
+      })
+
+      setLiveData({
+        totalSpent: data.totalSpent || 0,
+        count: data.count || 0,
+        buckets: liveBuckets,
+        expenses: data.expenses || [],
+      })
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   if (loading) return <div className="loading">Loading your buckets... 🪣</div>
   if (error) return <div className="error-box">{error}</div>
+
+  // ── Live Mode Dashboard ──
+  if (isLive) {
+    if (!liveData) return null
+    const hasExpenses = liveData.count > 0
+
+    return (
+      <div className="dashboard">
+        <div className="dashboard-header">
+          <h2>
+            ⚡ {getMonthLabel(monthKey)}
+            <span className="mode-badge live-badge">Live</span>
+          </h2>
+          {hasExpenses && (
+            <div className="summary-stats">
+              <div className="stat">
+                <span className="stat-value">${liveData.totalSpent.toLocaleString()}</span>
+                <span className="stat-label">recorded</span>
+              </div>
+              <div className="stat">
+                <span className="stat-value">{liveData.count}</span>
+                <span className="stat-label">expenses</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {!hasExpenses ? (
+          <div className="empty-state">
+            <div className="empty-icon">⚡</div>
+            <h3>No live expenses for {getMonthLabel(monthKey)}</h3>
+            <p>Start recording expenses as they happen.</p>
+            <button className="primary-btn" onClick={() => setPage('live')}>
+              Add Expense →
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="bucket-grid">
+              {[...liveData.buckets]
+                .filter(b => b.spent > 0)
+                .sort((a, b) => b.spent - a.spent)
+                .map((bucket, idx) => (
+                  <BucketCard key={bucket.bucketId} bucket={bucket} rank={idx} onSetPage={setPage} />
+                ))}
+            </div>
+
+            <div className="cta-bar">
+              <button className="primary-btn" onClick={() => setPage('live')}>
+                Add Another Expense ⚡
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  // ── Statements Mode Dashboard (original) ──
   if (!summary) return null
 
   const hasTransactions = summary.transactionCount > 0

@@ -194,6 +194,40 @@ Resources:
         - Key: App
           Value: leaky-buckets
 
+  LiveExpensesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "lb-live-expenses-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: !Ref AppKey
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: monthKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: byMonth
+          KeySchema:
+            - AttributeName: monthKey
+              KeyType: HASH
+            - AttributeName: sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: App
+          Value: leaky-buckets
+
   PaystubsTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -269,3 +303,8 @@ Outputs:
     Value: !Ref PaystubsTable
     Export:
       Name: !Sub "lb-${Environment}-paystubs-table"
+
+  LiveExpensesTableName:
+    Value: !Ref LiveExpensesTable
+    Export:
+      Name: !Sub "lb-${Environment}-live-expenses-table"

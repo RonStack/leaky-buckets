@@ -5,18 +5,21 @@ import Dashboard from './pages/Dashboard'
 import UploadPage from './pages/UploadPage'
 import ReviewPage from './pages/ReviewPage'
 import SettingsPage from './pages/SettingsPage'
+import LiveExpensePage from './pages/LiveExpensePage'
 
 const PAGES = {
   dashboard: Dashboard,
   upload: UploadPage,
   review: ReviewPage,
   settings: SettingsPage,
+  live: LiveExpensePage,
 }
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(isLoggedIn())
   const [page, setPage] = useState('dashboard')
   const [monthKey, setMonthKey] = useState(getCurrentMonthKey())
+  const [mode, setMode] = useState('statements') // 'statements' or 'live'
 
   if (!loggedIn) {
     return <LoginPage onLogin={() => setLoggedIn(true)} />
@@ -24,12 +27,32 @@ export default function App() {
 
   const Page = PAGES[page] || Dashboard
 
+  // In Live mode, dashboard shows live data; other pages stay the same
+  const isLive = mode === 'live'
+
   return (
     <div className="app">
       <header className="app-header">
         <div className="header-left">
           <h1 onClick={() => setPage('dashboard')}>🪣 Leaky Buckets</h1>
         </div>
+
+        {/* Mode Toggle */}
+        <div className="mode-toggle">
+          <button
+            className={mode === 'statements' ? 'active' : ''}
+            onClick={() => { setMode('statements'); setPage('dashboard') }}
+          >
+            📊 Statements
+          </button>
+          <button
+            className={mode === 'live' ? 'active' : ''}
+            onClick={() => { setMode('live'); setPage('dashboard') }}
+          >
+            ⚡ Live
+          </button>
+        </div>
+
         <nav className="header-nav">
           <button
             className={page === 'dashboard' ? 'active' : ''}
@@ -37,18 +60,29 @@ export default function App() {
           >
             Dashboard
           </button>
-          <button
-            className={page === 'upload' ? 'active' : ''}
-            onClick={() => setPage('upload')}
-          >
-            Upload
-          </button>
-          <button
-            className={page === 'review' ? 'active' : ''}
-            onClick={() => setPage('review')}
-          >
-            Review
-          </button>
+          {isLive ? (
+            <button
+              className={page === 'live' ? 'active' : ''}
+              onClick={() => setPage('live')}
+            >
+              Add Expense
+            </button>
+          ) : (
+            <>
+              <button
+                className={page === 'upload' ? 'active' : ''}
+                onClick={() => setPage('upload')}
+              >
+                Upload
+              </button>
+              <button
+                className={page === 'review' ? 'active' : ''}
+                onClick={() => setPage('review')}
+              >
+                Review
+              </button>
+            </>
+          )}
           <button
             className={page === 'settings' ? 'active' : ''}
             onClick={() => setPage('settings')}
@@ -76,7 +110,7 @@ export default function App() {
       </header>
 
       <main className="app-main">
-        <Page monthKey={monthKey} setPage={setPage} />
+        <Page monthKey={monthKey} setPage={setPage} mode={mode} />
       </main>
     </div>
   )

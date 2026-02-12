@@ -45,6 +45,7 @@ def handler(event, context):
         "merchants": 0,
         "summaries": 0,
         "paystubs": 0,
+        "liveExpenses": 0,
         "s3_objects": 0,
     }
 
@@ -89,7 +90,18 @@ def handler(event, context):
         except Exception as e:
             print(f"Paystub cleanup warning: {e}")
 
-        # 6. Delete all S3 uploads (raw + normalized + paystubs)
+        # 6. Delete all live expenses
+        try:
+            from lib.db import live_expenses_table
+            le_table = live_expenses_table()
+            live_items = scan_all(le_table)
+            for le in live_items:
+                delete_item(le_table, {"pk": le["pk"], "sk": le["sk"]})
+                deleted["liveExpenses"] += 1
+        except Exception as e:
+            print(f"Live expenses cleanup warning: {e}")
+
+        # 7. Delete all S3 uploads (raw + normalized + paystubs)
         if BUCKET:
             try:
                 paginator = s3.get_paginator("list_objects_v2")

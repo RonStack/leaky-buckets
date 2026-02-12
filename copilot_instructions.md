@@ -61,6 +61,7 @@ leaky-buckets/
 │   │   ├── buckets.py      # GET /buckets, PUT /buckets/{id}, POST /buckets/seed
 │   │   ├── deletedata.py   # POST /delete-all-data (hard deletes all user data)
 │   │   ├── health.py       # GET /health (no auth)
+│   │   ├── live.py         # POST/GET /live-expenses, PUT/DELETE /live-expenses/{id}
 │   │   ├── month.py        # GET /month/{key}, POST /month/{key}/lock
 │   │   ├── paystub.py      # POST/GET /paystub, PUT/DELETE /paystub/{id}
 │   │   ├── transactions.py # GET /transactions, PUT /transactions/{id}
@@ -81,11 +82,12 @@ leaky-buckets/
 │   │   ├── auth.js         # Cognito auth helpers (login, logout, token management)
 │   │   ├── main.jsx        # React entry point
 │   │   ├── pages/
-│   │   │   ├── Dashboard.jsx   # Faucet waterfall + bucket grid + summary stats
-│   │   │   ├── LoginPage.jsx   # Email/password login, handles newPasswordRequired
-│   │   │   ├── ReviewPage.jsx  # Exception-only review (low confidence + uncategorized)
-│   │   │   ├── SettingsPage.jsx # Bucket targets editor + Delete All Data
-│   │   │   └── UploadPage.jsx  # 3 source types, accepts CSV/PDF/image
+│   │   │   ├── Dashboard.jsx     # Faucet waterfall + bucket grid + summary stats (supports Live mode)
+│   │   │   ├── LiveExpensePage.jsx # ⚡ Add live expense form + recent expense list
+│   │   │   ├── LoginPage.jsx     # Email/password login, handles newPasswordRequired
+│   │   │   ├── ReviewPage.jsx    # Exception-only review (low confidence + uncategorized)
+│   │   │   ├── SettingsPage.jsx  # Bucket targets editor + Delete All Data
+│   │   │   └── UploadPage.jsx    # 3 source types, accepts CSV/PDF/image
 │   │   └── styles.css      # All styles (playful, warm theme)
 │   ├── index.html
 │   ├── package.json
@@ -125,6 +127,7 @@ leaky-buckets/
 | `lb-buckets-prod` | `pk` (USER#id) | `sk` (BUCKET#id) | — |
 | `lb-monthly-summaries-prod` | `pk` (USER#id) | `sk` (MONTH#key) | — |
 | `lb-paystubs-prod` | `paystubId` | — | `byMonth` GSI (monthKey + paystubId) |
+| `lb-live-expenses-prod` | `pk` (USER#id) | `sk` (EXP#date#id) | `byMonth` GSI (monthKey + sk) |
 
 ---
 
@@ -170,6 +173,14 @@ leaky-buckets/
 3. Shows **The Faucet** waterfall: Gross → Taxes → Investing → Debt → Take-Home
 4. Shows **Bucket Grid** below: spending categories with fill bars and status icons
 
+### Live Expense Recording
+1. User switches to **Live** mode via toggle in header (vs **Statements** mode)
+2. In Live mode, user sees "Add Expense" nav item instead of Upload/Review
+3. User enters amount, picks a bucket, optionally adds a note and date
+4. Expense stored in `lb-live-expenses-prod` table with `pk=USER#id`, `sk=EXP#date#uuid`
+5. Dashboard in Live mode shows bucket grid filled from live expense totals
+6. Live data is stored separately from statement data — eventually can be compared
+
 ---
 
 ## Key Design Decisions
@@ -177,7 +188,8 @@ leaky-buckets/
 - **CORS:** Locked to `https://leakingbuckets.goronny.com` in both `api.yml` (API Gateway) and `response.py` (Lambda headers). Also, `AddDefaultAuthorizerToCorsPreflight: false` is set so OPTIONS requests bypass the Cognito authorizer.
 - **Bucket seeding:** Default buckets are auto-seeded on dashboard load (idempotent). Buckets: Housing, Groceries, Dining, Transport, Shopping, Entertainment, Healthcare, Subscriptions, Travel, Misc.
 - **Merchant memory:** When a user confirms a categorization on the Review page with "remember," the merchant → bucket mapping is stored in DynamoDB. Next time that merchant appears, it's categorized instantly without AI.
-- **Month-scoping:** Transactions and paystubs are scoped by `monthKey` (e.g., "2026-01"). The frontend has a month picker that drives all data queries.
+- **Mode toggle:** The app has two modes: **Statements** (analytics from uploaded bank/credit card statements and paystubs) and **Live** (manual real-time expense recording). Mode toggle is in the header. Each mode has its own dashboard view and nav items.
+- **Month-scoping:** Transactions, paystubs, and live expenses are all scoped by `monthKey` (e.g., "2026-01"). The frontend has a month picker that drives all data queries.
 - **OpenAI models:** GPT-4o-mini for merchant categorization (cheap, fast), GPT-4o for paystub/statement parsing (more capable, handles complex layouts).
 - **No PyMuPDF:** We tried PyMuPDF for PDF→image conversion but it requires native C libraries incompatible with Lambda arm64. Switched to `pypdf` (pure Python text extraction). Image-based/scanned PDFs won't work with text extraction — users should upload those as screenshots instead.
 - **API Gateway 29s timeout:** REST API has a hard 29-second integration timeout. Lambda timeouts are set higher (60-90s) but the client may get a 504 if AI parsing takes too long. The frontend handles this gracefully — shows "Upload received!" and directs users to check Dashboard/Review in a minute. The Lambda finishes in the background and data lands in DynamoDB.

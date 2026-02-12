@@ -102,4 +102,21 @@ export const api = {
     }),
   deletePaystub: (paystubId) =>
     request(`/paystub/${paystubId}`, { method: 'DELETE' }),
+
+  // Live Expenses ⚡
+  addLiveExpense: (expense) =>
+    request('/live-expenses', {
+      method: 'POST',
+      body: JSON.stringify(expense),
+    }),
+  getLiveExpenses: (monthKey) => request(`/live-expenses?monthKey=${monthKey}`),
+  updateLiveExpense: (expenseId, updates) =>
+    request(`/live-expenses/${expenseId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    }),
+  deleteLiveExpense: (expenseId, sk) =>
+    request(`/live-expenses/${expenseId}?sk=${encodeURIComponent(sk)}`, {
+      method: 'DELETE',
+    }),
 }

@@ -37,6 +37,8 @@ Globals:
           Fn::Sub: "lb-${Environment}-monthly-summaries-table"
         PAYSTUBS_TABLE: !ImportValue
           Fn::Sub: "lb-${Environment}-paystubs-table"
+        LIVE_EXPENSES_TABLE: !ImportValue
+          Fn::Sub: "lb-${Environment}-live-expenses-table"
         KMS_KEY_ARN: !ImportValue
           Fn::Sub: "lb-${Environment}-kms-key-arn"
         OPENAI_API_KEY: !Ref OpenAiApiKey
@@ -269,6 +271,39 @@ Resources:
           Properties:
             RestApiId: !Ref Api
             Path: /paystub/{paystubId}
+            Method: DELETE
+
+  LiveExpensesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "lb-live-${Environment}"
+      Handler: handlers/live.handler
+      CodeUri: ../backend/
+      Role: !GetAtt LambdaRole.Arn
+      Events:
+        Add:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /live-expenses
+            Method: POST
+        List:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /live-expenses
+            Method: GET
+        Update:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /live-expenses/{expenseId}
+            Method: PUT
+        Delete:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /live-expenses/{expenseId}
             Method: DELETE
 
   DeleteDataFunction:
