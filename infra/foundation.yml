@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Leaky-Buckets Foundation — S3 buckets, DynamoDB tables, KMS key"
+Description: "ChestCheck Foundation — KMS key, S3 bucket, DynamoDB tables"
 
 Parameters:
   Environment:
@@ -14,7 +14,7 @@ Resources:
   AppKey:
     Type: AWS::KMS::Key
     Properties:
-      Description: Leaky-Buckets encryption key
+      Description: ChestCheck encryption key
       EnableKeyRotation: true
       KeyPolicy:
         Version: "2012-10-17"
@@ -46,43 +46,12 @@ Resources:
         RestrictPublicBuckets: true
       Tags:
         - Key: App
-          Value: leaky-buckets
+          Value: chestcheck
         - Key: Environment
           Value: !Ref Environment
 
   # -------------------------------------------------------
-  # S3 — uploads bucket (raw + normalized prefixes)
-  # -------------------------------------------------------
-  UploadsBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub "lb-uploads-${Environment}-${AWS::AccountId}"
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: aws:kms
-              KMSMasterKeyID: !Ref AppKey
-      VersioningConfiguration:
-        Status: Enabled
-      LifecycleConfiguration:
-        Rules:
-          - Id: ExpireOldVersions
-            Status: Enabled
-            NoncurrentVersionExpiration:
-              NoncurrentDays: 90
-      Tags:
-        - Key: App
-          Value: leaky-buckets
-        - Key: Environment
-          Value: !Ref Environment
-
-  # -------------------------------------------------------
-  # DynamoDB Tables
+  # DynamoDB — Users (userId → householdId mapping)
   # -------------------------------------------------------
   UsersTable:
     Type: AWS::DynamoDB::Table
@@ -101,8 +70,59 @@ Resources:
           KeyType: HASH
       Tags:
         - Key: App
-          Value: leaky-buckets
+          Value: chestcheck
 
+  # -------------------------------------------------------
+  # DynamoDB — Households
+  # -------------------------------------------------------
+  HouseholdsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "lb-households-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: !Ref AppKey
+      AttributeDefinitions:
+        - AttributeName: householdId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: householdId
+          KeyType: HASH
+      Tags:
+        - Key: App
+          Value: chestcheck
+
+  # -------------------------------------------------------
+  # DynamoDB — Categories (Treasure Chests)
+  # -------------------------------------------------------
+  CategoriesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "lb-categories-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: !Ref AppKey
+      AttributeDefinitions:
+        - AttributeName: householdId
+          AttributeType: S
+        - AttributeName: categoryId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: householdId
+          KeyType: HASH
+        - AttributeName: categoryId
+          KeyType: RANGE
+      Tags:
+        - Key: App
+          Value: chestcheck
+
+  # -------------------------------------------------------
+  # DynamoDB — Transactions
+  # -------------------------------------------------------
   TransactionsTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -113,173 +133,18 @@ Resources:
         SSEType: KMS
         KMSMasterKeyId: !Ref AppKey
       AttributeDefinitions:
-        - AttributeName: pk
-          AttributeType: S
-        - AttributeName: sk
-          AttributeType: S
-        - AttributeName: monthKey
-          AttributeType: S
-      KeySchema:
-        - AttributeName: pk
-          KeyType: HASH
-        - AttributeName: sk
-          KeyType: RANGE
-      GlobalSecondaryIndexes:
-        - IndexName: byMonth
-          KeySchema:
-            - AttributeName: monthKey
-              KeyType: HASH
-            - AttributeName: sk
-              KeyType: RANGE
-          Projection:
-            ProjectionType: ALL
-      Tags:
-        - Key: App
-          Value: leaky-buckets
-
-  MerchantsTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub "lb-merchants-${Environment}"
-      BillingMode: PAY_PER_REQUEST
-      SSESpecification:
-        SSEEnabled: true
-        SSEType: KMS
-        KMSMasterKeyId: !Ref AppKey
-      AttributeDefinitions:
-        - AttributeName: merchantName
-          AttributeType: S
-      KeySchema:
-        - AttributeName: merchantName
-          KeyType: HASH
-      Tags:
-        - Key: App
-          Value: leaky-buckets
-
-  BucketsTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub "lb-buckets-${Environment}"
-      BillingMode: PAY_PER_REQUEST
-      SSESpecification:
-        SSEEnabled: true
-        SSEType: KMS
-        KMSMasterKeyId: !Ref AppKey
-      AttributeDefinitions:
-        - AttributeName: bucketId
-          AttributeType: S
-      KeySchema:
-        - AttributeName: bucketId
-          KeyType: HASH
-      Tags:
-        - Key: App
-          Value: leaky-buckets
-
-  MonthlySummariesTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub "lb-monthly-summaries-${Environment}"
-      BillingMode: PAY_PER_REQUEST
-      SSESpecification:
-        SSEEnabled: true
-        SSEType: KMS
-        KMSMasterKeyId: !Ref AppKey
-      AttributeDefinitions:
-        - AttributeName: monthKey
-          AttributeType: S
-      KeySchema:
-        - AttributeName: monthKey
-          KeyType: HASH
-      Tags:
-        - Key: App
-          Value: leaky-buckets
-
-  LiveExpensesTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub "lb-live-expenses-${Environment}"
-      BillingMode: PAY_PER_REQUEST
-      SSESpecification:
-        SSEEnabled: true
-        SSEType: KMS
-        KMSMasterKeyId: !Ref AppKey
-      AttributeDefinitions:
-        - AttributeName: pk
-          AttributeType: S
-        - AttributeName: sk
-          AttributeType: S
-        - AttributeName: monthKey
-          AttributeType: S
-      KeySchema:
-        - AttributeName: pk
-          KeyType: HASH
-        - AttributeName: sk
-          KeyType: RANGE
-      GlobalSecondaryIndexes:
-        - IndexName: byMonth
-          KeySchema:
-            - AttributeName: monthKey
-              KeyType: HASH
-            - AttributeName: sk
-              KeyType: RANGE
-          Projection:
-            ProjectionType: ALL
-      Tags:
-        - Key: App
-          Value: leaky-buckets
-
-  RecurringBillsTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub "lb-recurring-bills-${Environment}"
-      BillingMode: PAY_PER_REQUEST
-      SSESpecification:
-        SSEEnabled: true
-        SSEType: KMS
-        KMSMasterKeyId: !Ref AppKey
-      AttributeDefinitions:
-        - AttributeName: pk
+        - AttributeName: householdId
           AttributeType: S
         - AttributeName: sk
           AttributeType: S
       KeySchema:
-        - AttributeName: pk
+        - AttributeName: householdId
           KeyType: HASH
         - AttributeName: sk
           KeyType: RANGE
       Tags:
         - Key: App
-          Value: leaky-buckets
-
-  PaystubsTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub "lb-paystubs-${Environment}"
-      BillingMode: PAY_PER_REQUEST
-      SSESpecification:
-        SSEEnabled: true
-        SSEType: KMS
-        KMSMasterKeyId: !Ref AppKey
-      AttributeDefinitions:
-        - AttributeName: paystubId
-          AttributeType: S
-        - AttributeName: monthKey
-          AttributeType: S
-      KeySchema:
-        - AttributeName: paystubId
-          KeyType: HASH
-      GlobalSecondaryIndexes:
-        - IndexName: byMonth
-          KeySchema:
-            - AttributeName: monthKey
-              KeyType: HASH
-            - AttributeName: paystubId
-              KeyType: RANGE
-          Projection:
-            ProjectionType: ALL
-      Tags:
-        - Key: App
-          Value: leaky-buckets
+          Value: chestcheck
 
 Outputs:
   KmsKeyArn:
@@ -287,52 +152,22 @@ Outputs:
     Export:
       Name: !Sub "lb-${Environment}-kms-key-arn"
 
-  UploadsBucketName:
-    Value: !Ref UploadsBucket
-    Export:
-      Name: !Sub "lb-${Environment}-uploads-bucket"
-
-  UploadsBucketArn:
-    Value: !GetAtt UploadsBucket.Arn
-    Export:
-      Name: !Sub "lb-${Environment}-uploads-bucket-arn"
-
   UsersTableName:
     Value: !Ref UsersTable
     Export:
       Name: !Sub "lb-${Environment}-users-table"
 
+  HouseholdsTableName:
+    Value: !Ref HouseholdsTable
+    Export:
+      Name: !Sub "lb-${Environment}-households-table"
+
+  CategoriesTableName:
+    Value: !Ref CategoriesTable
+    Export:
+      Name: !Sub "lb-${Environment}-categories-table"
+
   TransactionsTableName:
     Value: !Ref TransactionsTable
     Export:
       Name: !Sub "lb-${Environment}-transactions-table"
-
-  MerchantsTableName:
-    Value: !Ref MerchantsTable
-    Export:
-      Name: !Sub "lb-${Environment}-merchants-table"
-
-  BucketsTableName:
-    Value: !Ref BucketsTable
-    Export:
-      Name: !Sub "lb-${Environment}-buckets-table"
-
-  MonthlySummariesTableName:
-    Value: !Ref MonthlySummariesTable
-    Export:
-      Name: !Sub "lb-${Environment}-monthly-summaries-table"
-
-  PaystubsTableName:
-    Value: !Ref PaystubsTable
-    Export:
-      Name: !Sub "lb-${Environment}-paystubs-table"
-
-  LiveExpensesTableName:
-    Value: !Ref LiveExpensesTable
-    Export:
-      Name: !Sub "lb-${Environment}-live-expenses-table"
-
-  RecurringBillsTableName:
-    Value: !Ref RecurringBillsTable
-    Export:
-      Name: !Sub "lb-${Environment}-recurring-bills-table"

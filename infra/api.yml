@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: "Leaky-Buckets API — API Gateway + Lambda functions"
+Description: "ChestCheck API — API Gateway + Lambda functions"
 
 Parameters:
   Environment:
@@ -11,7 +11,7 @@ Parameters:
   OpenAiApiKey:
     Type: String
     NoEcho: true
-    Description: OpenAI API key for merchant categorization
+    Description: Unused in v1 — kept for pipeline compatibility
 
 Globals:
   Function:
@@ -23,27 +23,16 @@ Globals:
     Environment:
       Variables:
         ENVIRONMENT: !Ref Environment
-        UPLOADS_BUCKET: !ImportValue
-          Fn::Sub: "lb-${Environment}-uploads-bucket"
         USERS_TABLE: !ImportValue
           Fn::Sub: "lb-${Environment}-users-table"
+        HOUSEHOLDS_TABLE: !ImportValue
+          Fn::Sub: "lb-${Environment}-households-table"
+        CATEGORIES_TABLE: !ImportValue
+          Fn::Sub: "lb-${Environment}-categories-table"
         TRANSACTIONS_TABLE: !ImportValue
           Fn::Sub: "lb-${Environment}-transactions-table"
-        MERCHANTS_TABLE: !ImportValue
-          Fn::Sub: "lb-${Environment}-merchants-table"
-        BUCKETS_TABLE: !ImportValue
-          Fn::Sub: "lb-${Environment}-buckets-table"
-        MONTHLY_SUMMARIES_TABLE: !ImportValue
-          Fn::Sub: "lb-${Environment}-monthly-summaries-table"
-        PAYSTUBS_TABLE: !ImportValue
-          Fn::Sub: "lb-${Environment}-paystubs-table"
-        LIVE_EXPENSES_TABLE: !ImportValue
-          Fn::Sub: "lb-${Environment}-live-expenses-table"
-        RECURRING_BILLS_TABLE: !ImportValue
-          Fn::Sub: "lb-${Environment}-recurring-bills-table"
         KMS_KEY_ARN: !ImportValue
           Fn::Sub: "lb-${Environment}-kms-key-arn"
-        OPENAI_API_KEY: !Ref OpenAiApiKey
 
 Resources:
   # -------------------------------------------------------
@@ -102,19 +91,6 @@ Resources:
                   - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/lb-*-${Environment}/index/*"
               - Effect: Allow
                 Action:
-                  - s3:GetObject
-                  - s3:PutObject
-                  - s3:DeleteObject
-                  - s3:ListBucket
-                Resource:
-                  - !ImportValue
-                    Fn::Sub: "lb-${Environment}-uploads-bucket-arn"
-                  - !Sub
-                    - "${BucketArn}/*"
-                    - BucketArn: !ImportValue
-                        Fn::Sub: "lb-${Environment}-uploads-bucket-arn"
-              - Effect: Allow
-                Action:
                   - kms:Decrypt
                   - kms:Encrypt
                   - kms:GenerateDataKey
@@ -142,22 +118,53 @@ Resources:
             Auth:
               Authorizer: NONE
 
-  UploadFunction:
+  UserFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "lb-upload-${Environment}"
-      Handler: handlers/upload.handler
+      FunctionName: !Sub "lb-user-${Environment}"
+      Handler: handlers/user.handler
       CodeUri: ../backend/
       Role: !GetAtt LambdaRole.Arn
-      Timeout: 90
-      MemorySize: 512
       Events:
-        Post:
+        GetMe:
           Type: Api
           Properties:
             RestApiId: !Ref Api
-            Path: /upload
+            Path: /me
+            Method: GET
+        JoinHousehold:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /household/join
             Method: POST
+
+  CategoriesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "lb-categories-${Environment}"
+      Handler: handlers/categories.handler
+      CodeUri: ../backend/
+      Role: !GetAtt LambdaRole.Arn
+      Events:
+        List:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /categories
+            Method: GET
+        Create:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /categories
+            Method: POST
+        Update:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /categories/{categoryId}
+            Method: PUT
 
   TransactionsFunction:
     Type: AWS::Serverless::Function
@@ -167,201 +174,55 @@ Resources:
       CodeUri: ../backend/
       Role: !GetAtt LambdaRole.Arn
       Events:
+        Create:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /transactions
+            Method: POST
         List:
           Type: Api
           Properties:
             RestApiId: !Ref Api
             Path: /transactions
             Method: GET
-        Review:
+        Delete:
           Type: Api
           Properties:
             RestApiId: !Ref Api
             Path: /transactions/{transactionId}
-            Method: PUT
+            Method: DELETE
 
-  BucketsFunction:
+  SummaryFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "lb-buckets-${Environment}"
-      Handler: handlers/buckets.handler
+      FunctionName: !Sub "lb-summary-${Environment}"
+      Handler: handlers/summary.handler
       CodeUri: ../backend/
       Role: !GetAtt LambdaRole.Arn
       Events:
-        List:
+        Get:
           Type: Api
           Properties:
             RestApiId: !Ref Api
-            Path: /buckets
+            Path: /summary
             Method: GET
-        Update:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /buckets/{bucketId}
-            Method: PUT
-        Seed:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /buckets/seed
-            Method: POST
 
-  MonthFunction:
+  DataFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "lb-month-${Environment}"
-      Handler: handlers/month.handler
-      CodeUri: ../backend/
-      Role: !GetAtt LambdaRole.Arn
-      Events:
-        Summary:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /month/{monthKey}
-            Method: GET
-        Lock:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /month/{monthKey}/lock
-            Method: POST
-        DeleteExpenses:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /month/{monthKey}/expenses
-            Method: DELETE
-        DeleteIncome:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /month/{monthKey}/income
-            Method: DELETE
-
-  PaystubFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub "lb-paystub-${Environment}"
-      Handler: handlers/paystub.handler
-      CodeUri: ../backend/
-      Role: !GetAtt LambdaRole.Arn
-      Timeout: 90
-      MemorySize: 512
-      Events:
-        Upload:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /paystub
-            Method: POST
-        List:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /paystub
-            Method: GET
-        Update:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /paystub/{paystubId}
-            Method: PUT
-        Delete:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /paystub/{paystubId}
-            Method: DELETE
-
-  LiveExpensesFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub "lb-live-${Environment}"
-      Handler: handlers/live.handler
-      CodeUri: ../backend/
-      Role: !GetAtt LambdaRole.Arn
-      Events:
-        Add:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /live-expenses
-            Method: POST
-        List:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /live-expenses
-            Method: GET
-        Update:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /live-expenses/{expenseId}
-            Method: PUT
-        Delete:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /live-expenses/{expenseId}
-            Method: DELETE
-
-  RecurringBillsFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub "lb-recurring-${Environment}"
-      Handler: handlers/recurring.handler
-      CodeUri: ../backend/
-      Role: !GetAtt LambdaRole.Arn
-      Events:
-        Add:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /recurring-bills
-            Method: POST
-        List:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /recurring-bills
-            Method: GET
-        Update:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /recurring-bills/{billId}
-            Method: PUT
-        Delete:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /recurring-bills/{billId}
-            Method: DELETE
-        Apply:
-          Type: Api
-          Properties:
-            RestApiId: !Ref Api
-            Path: /recurring-bills/apply
-            Method: POST
-
-  DeleteDataFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub "lb-deletedata-${Environment}"
-      Handler: handlers/deletedata.handler
+      FunctionName: !Sub "lb-data-${Environment}"
+      Handler: handlers/data.handler
       CodeUri: ../backend/
       Role: !GetAtt LambdaRole.Arn
       Timeout: 60
       Events:
-        Delete:
+        DeleteAll:
           Type: Api
           Properties:
             RestApiId: !Ref Api
-            Path: /delete-all-data
-            Method: POST
+            Path: /data
+            Method: DELETE
 
 Outputs:
   ApiUrl:

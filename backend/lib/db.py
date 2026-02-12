@@ -1,11 +1,10 @@
-"""DynamoDB helper utilities for Leaky-Buckets."""
+"""DynamoDB helper utilities for ChestCheck."""
 
 import os
 import boto3
 from boto3.dynamodb.conditions import Key
 from decimal import Decimal
 import json
-
 
 _dynamodb = boto3.resource("dynamodb")
 
@@ -19,28 +18,16 @@ def users_table():
     return _table("USERS_TABLE")
 
 
+def households_table():
+    return _table("HOUSEHOLDS_TABLE")
+
+
+def categories_table():
+    return _table("CATEGORIES_TABLE")
+
+
 def transactions_table():
     return _table("TRANSACTIONS_TABLE")
-
-
-def merchants_table():
-    return _table("MERCHANTS_TABLE")
-
-
-def buckets_table():
-    return _table("BUCKETS_TABLE")
-
-
-def summaries_table():
-    return _table("MONTHLY_SUMMARIES_TABLE")
-
-
-def live_expenses_table():
-    return _table("LIVE_EXPENSES_TABLE")
-
-
-def recurring_bills_table():
-    return _table("RECURRING_BILLS_TABLE")
 
 
 # ---- Generic helpers ----
@@ -111,6 +98,8 @@ def batch_write(table, items: list[dict]):
 def _sanitize_value(v):
     if isinstance(v, float):
         return Decimal(str(v))
+    if isinstance(v, int) and not isinstance(v, bool):
+        return v
     if isinstance(v, dict):
         return _sanitize(v)
     if isinstance(v, list):

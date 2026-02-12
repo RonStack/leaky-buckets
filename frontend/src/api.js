@@ -1,5 +1,5 @@
 /*
- * Leaky-Buckets API client
+ * ChestCheck API client
  * All API calls go through here.
  */
 
@@ -21,122 +21,55 @@ async function request(path, options = {}) {
       const data = await res.json()
       if (data.error) message = data.error
     } catch {
-      // Non-JSON error body (e.g., 504 from API Gateway)
       message = `${res.status} ${res.statusText || 'Gateway Timeout'}`
     }
     throw new Error(message)
   }
 
-  const data = await res.json()
-  return data
+  return res.json()
 }
 
 export const api = {
   // Health
   health: () => request('/health'),
 
-  // Upload
-  upload: (fileName, source, csvContent) =>
-    request('/upload', {
+  // User & Household
+  getMe: () => request('/me'),
+  joinHousehold: (householdId) =>
+    request('/household/join', {
       method: 'POST',
-      body: JSON.stringify({ fileName, source, csvContent }),
-    }),
-  uploadFile: (fileName, source, fileContent) =>
-    request('/upload', {
-      method: 'POST',
-      body: JSON.stringify({ fileName, source, fileContent }),
+      body: JSON.stringify({ householdId }),
     }),
 
-  // Transactions
-  getTransactions: (monthKey) => request(`/transactions?monthKey=${monthKey}`),
-  updateTransaction: (transactionId, bucket, rememberMerchant = false, monthKey = '') =>
-    request(`/transactions/${transactionId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ bucket, rememberMerchant, monthKey }),
+  // Categories (Chests)
+  getCategories: () => request('/categories'),
+  createCategory: (category) =>
+    request('/categories', {
+      method: 'POST',
+      body: JSON.stringify(category),
     }),
-
-  // Buckets
-  getBuckets: () => request('/buckets'),
-  updateBucket: (bucketId, updates) =>
-    request(`/buckets/${bucketId}`, {
+  updateCategory: (categoryId, updates) =>
+    request(`/categories/${categoryId}`, {
       method: 'PUT',
       body: JSON.stringify(updates),
     }),
-  seedBuckets: () => request('/buckets/seed', { method: 'POST' }),
 
-  // Month
-  getMonthSummary: (monthKey) => request(`/month/${monthKey}`),
-  lockMonth: (monthKey) =>
-    request(`/month/${monthKey}/lock`, { method: 'POST' }),
+  // Transactions (Spends)
+  getTransactions: (monthKey) =>
+    request(`/transactions?monthKey=${monthKey}`),
+  logSpend: (transaction) =>
+    request('/transactions', {
+      method: 'POST',
+      body: JSON.stringify(transaction),
+    }),
+  deleteTransaction: (transactionId) =>
+    request(`/transactions/${transactionId}`, { method: 'DELETE' }),
 
-  // Delete all data
+  // Summary
+  getSummary: (monthKey) =>
+    request(`/summary?monthKey=${monthKey}`),
+
+  // Data management
   deleteAllData: () =>
-    request('/delete-all-data', {
-      method: 'POST',
-      body: JSON.stringify({ confirmation: 'DELETE' }),
-    }),
-
-  // Delete month data
-  deleteExpenses: (monthKey) =>
-    request(`/month/${monthKey}/expenses`, {
-      method: 'DELETE',
-      body: JSON.stringify({ confirmation: 'DELETE' }),
-    }),
-  deleteIncome: (monthKey) =>
-    request(`/month/${monthKey}/income`, {
-      method: 'DELETE',
-      body: JSON.stringify({ confirmation: 'DELETE' }),
-    }),
-
-  // Paystubs (The Faucet 🚰)
-  uploadPaystub: (fileName, source, fileContent) =>
-    request('/paystub', {
-      method: 'POST',
-      body: JSON.stringify({ fileName, source, fileContent }),
-    }),
-  getPaystubs: (monthKey) => request(`/paystub?monthKey=${monthKey}`),
-  updatePaystub: (paystubId, updates) =>
-    request(`/paystub/${paystubId}`, {
-      method: 'PUT',
-      body: JSON.stringify(updates),
-    }),
-  deletePaystub: (paystubId) =>
-    request(`/paystub/${paystubId}`, { method: 'DELETE' }),
-
-  // Live Expenses ⚡
-  addLiveExpense: (expense) =>
-    request('/live-expenses', {
-      method: 'POST',
-      body: JSON.stringify(expense),
-    }),
-  getLiveExpenses: (monthKey) => request(`/live-expenses?monthKey=${monthKey}`),
-  updateLiveExpense: (expenseId, updates) =>
-    request(`/live-expenses/${expenseId}`, {
-      method: 'PUT',
-      body: JSON.stringify(updates),
-    }),
-  deleteLiveExpense: (expenseId, sk) =>
-    request(`/live-expenses/${expenseId}?sk=${encodeURIComponent(sk)}`, {
-      method: 'DELETE',
-    }),
-
-  // Recurring Bills 🔁
-  getRecurringBills: () => request('/recurring-bills'),
-  addRecurringBill: (bill) =>
-    request('/recurring-bills', {
-      method: 'POST',
-      body: JSON.stringify(bill),
-    }),
-  updateRecurringBill: (billId, updates) =>
-    request(`/recurring-bills/${billId}`, {
-      method: 'PUT',
-      body: JSON.stringify(updates),
-    }),
-  deleteRecurringBill: (billId) =>
-    request(`/recurring-bills/${billId}`, { method: 'DELETE' }),
-  applyRecurringBills: (monthKey) =>
-    request('/recurring-bills/apply', {
-      method: 'POST',
-      body: JSON.stringify({ monthKey }),
-    }),
+    request('/data', { method: 'DELETE' }),
 }

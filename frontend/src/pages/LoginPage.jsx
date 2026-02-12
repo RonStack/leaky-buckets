@@ -24,9 +24,9 @@ export default function LoginPage({ onLogin }) {
   return (
     <div className="login-page">
       <div className="login-card">
-        <h1>🪣</h1>
-        <h2>Leaky Buckets</h2>
-        <p className="login-subtitle">Your 10-minute money check-in</p>
+        <h1>�</h1>
+        <h2>ChestCheck</h2>
+        <p className="login-subtitle">Track your spending, guard your chests</p>
 
         <form onSubmit={handleSubmit}>
           <input
