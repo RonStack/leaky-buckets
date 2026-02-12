@@ -39,6 +39,10 @@ def live_expenses_table():
     return _table("LIVE_EXPENSES_TABLE")
 
 
+def recurring_bills_table():
+    return _table("RECURRING_BILLS_TABLE")
+
+
 # ---- Generic helpers ----
 
 def put_item(table, item: dict) -> dict:

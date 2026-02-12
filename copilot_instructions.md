@@ -24,7 +24,7 @@ The deploy workflow has **path filters** — empty commits won't trigger it. Use
 
 ```
 ┌─────────────┐     ┌──────────────────┐     ┌──────────────┐
-│  React SPA  │────▶│  API Gateway     │────▶│  Lambda (x7) │
+│  React SPA  │────▶│  API Gateway     │────▶│  Lambda (x8) │
 │  (CloudFront)│    │  (Cognito auth)  │     │  Python 3.12 │
 └─────────────┘     └──────────────────┘     └──────┬───────┘
                                                      │
@@ -32,7 +32,7 @@ The deploy workflow has **path filters** — empty commits won't trigger it. Use
                                     ▼                ▼            ▼
                               ┌──────────┐    ┌──────────┐  ┌─────────┐
                               │ DynamoDB │    │    S3    │  │ OpenAI  │
-                              │ (6 tables)│   │ (uploads)│  │ GPT-4o  │
+                              │ (8 tables)│   │ (uploads)│  │ GPT-4o  │
                               └──────────┘    └──────────┘  └─────────┘
 ```
 
@@ -180,6 +180,15 @@ leaky-buckets/
 4. Expense stored in `lb-live-expenses-prod` table with `pk=USER#id`, `sk=EXP#date#uuid`
 5. Dashboard in Live mode shows bucket grid filled from live expense totals
 6. Live data is stored separately from statement data — eventually can be compared
+
+### Recurring Bills
+1. In **Live** mode, user navigates to "Recurring" page to manage monthly bill definitions
+2. Each bill has a name, amount, and bucket — no date needed (per-month concept)
+3. Bills are stored in `lb-recurring-bills-prod` table with `pk=USER#id`, `sk=BILL#uuid`
+4. When viewing any month in Live mode, Dashboard shows a banner if recurring bills haven't been applied
+5. User clicks "Apply Now" → backend creates live expenses for each bill with `source: "recurring"` and `recurringBillId`
+6. Duplicate detection: already-applied bills (matched by `recurringBillId`) are skipped
+7. Month picker includes 3 future months to enable forward-looking planning
 
 ---
 

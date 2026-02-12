@@ -39,6 +39,8 @@ Globals:
           Fn::Sub: "lb-${Environment}-paystubs-table"
         LIVE_EXPENSES_TABLE: !ImportValue
           Fn::Sub: "lb-${Environment}-live-expenses-table"
+        RECURRING_BILLS_TABLE: !ImportValue
+          Fn::Sub: "lb-${Environment}-recurring-bills-table"
         KMS_KEY_ARN: !ImportValue
           Fn::Sub: "lb-${Environment}-kms-key-arn"
         OPENAI_API_KEY: !Ref OpenAiApiKey
@@ -305,6 +307,45 @@ Resources:
             RestApiId: !Ref Api
             Path: /live-expenses/{expenseId}
             Method: DELETE
+
+  RecurringBillsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "lb-recurring-${Environment}"
+      Handler: handlers/recurring.handler
+      CodeUri: ../backend/
+      Role: !GetAtt LambdaRole.Arn
+      Events:
+        Add:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /recurring-bills
+            Method: POST
+        List:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /recurring-bills
+            Method: GET
+        Update:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /recurring-bills/{billId}
+            Method: PUT
+        Delete:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /recurring-bills/{billId}
+            Method: DELETE
+        Apply:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /recurring-bills/apply
+            Method: POST
 
   DeleteDataFunction:
     Type: AWS::Serverless::Function

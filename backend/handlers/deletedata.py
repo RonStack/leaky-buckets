@@ -46,6 +46,7 @@ def handler(event, context):
         "summaries": 0,
         "paystubs": 0,
         "liveExpenses": 0,
+        "recurringBills": 0,
         "s3_objects": 0,
     }
 
@@ -101,7 +102,18 @@ def handler(event, context):
         except Exception as e:
             print(f"Live expenses cleanup warning: {e}")
 
-        # 7. Delete all S3 uploads (raw + normalized + paystubs)
+        # 7. Delete all recurring bills
+        try:
+            from lib.db import recurring_bills_table
+            rb_table = recurring_bills_table()
+            rb_items = scan_all(rb_table)
+            for rb in rb_items:
+                delete_item(rb_table, {"pk": rb["pk"], "sk": rb["sk"]})
+                deleted["recurringBills"] += 1
+        except Exception as e:
+            print(f"Recurring bills cleanup warning: {e}")
+
+        # 8. Delete all S3 uploads (raw + normalized + paystubs)
         if BUCKET:
             try:
                 paginator = s3.get_paginator("list_objects_v2")

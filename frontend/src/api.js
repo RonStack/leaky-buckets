@@ -119,4 +119,24 @@ export const api = {
     request(`/live-expenses/${expenseId}?sk=${encodeURIComponent(sk)}`, {
       method: 'DELETE',
     }),
+
+  // Recurring Bills 🔁
+  getRecurringBills: () => request('/recurring-bills'),
+  addRecurringBill: (bill) =>
+    request('/recurring-bills', {
+      method: 'POST',
+      body: JSON.stringify(bill),
+    }),
+  updateRecurringBill: (billId, updates) =>
+    request(`/recurring-bills/${billId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    }),
+  deleteRecurringBill: (billId) =>
+    request(`/recurring-bills/${billId}`, { method: 'DELETE' }),
+  applyRecurringBills: (monthKey) =>
+    request('/recurring-bills/apply', {
+      method: 'POST',
+      body: JSON.stringify({ monthKey }),
+    }),
 }

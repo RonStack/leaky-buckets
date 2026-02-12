@@ -6,6 +6,7 @@ import UploadPage from './pages/UploadPage'
 import ReviewPage from './pages/ReviewPage'
 import SettingsPage from './pages/SettingsPage'
 import LiveExpensePage from './pages/LiveExpensePage'
+import RecurringBillsPage from './pages/RecurringBillsPage'
 
 const PAGES = {
   dashboard: Dashboard,
@@ -13,6 +14,7 @@ const PAGES = {
   review: ReviewPage,
   settings: SettingsPage,
   live: LiveExpensePage,
+  recurring: RecurringBillsPage,
 }
 
 export default function App() {
@@ -61,12 +63,20 @@ export default function App() {
             Dashboard
           </button>
           {isLive ? (
-            <button
-              className={page === 'live' ? 'active' : ''}
-              onClick={() => setPage('live')}
-            >
-              Add Expense
-            </button>
+            <>
+              <button
+                className={page === 'live' ? 'active' : ''}
+                onClick={() => setPage('live')}
+              >
+                Add Expense
+              </button>
+              <button
+                className={page === 'recurring' ? 'active' : ''}
+                onClick={() => setPage('recurring')}
+              >
+                Recurring
+              </button>
+            </>
           ) : (
             <>
               <button
@@ -124,7 +134,8 @@ function getCurrentMonthKey() {
 function getMonthOptions() {
   const options = []
   const now = new Date()
-  for (let i = 0; i < 12; i++) {
+  // 3 future months + current + 11 past months
+  for (let i = -3; i < 12; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })

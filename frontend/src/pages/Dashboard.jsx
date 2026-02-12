@@ -19,6 +19,8 @@ export default function Dashboard({ monthKey, setPage, mode }) {
   const [liveData, setLiveData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [recurringStatus, setRecurringStatus] = useState(null) // { hasBills, alreadyApplied }
+  const [applyingBills, setApplyingBills] = useState(false)
 
   const isLive = mode === 'live'
 
@@ -61,6 +63,27 @@ export default function Dashboard({ monthKey, setPage, mode }) {
       // Also load buckets for emoji/target data
       const bucketData = await api.getBuckets()
       const bucketList = bucketData.buckets || bucketData || []
+
+      // Check recurring bills status
+      try {
+        const rbData = await api.getRecurringBills()
+        const rbBills = rbData.bills || []
+        if (rbBills.length > 0) {
+          // Check if any have already been applied this month
+          const expenses = data.expenses || []
+          const appliedIds = new Set(
+            expenses
+              .filter(e => e.source === 'recurring' && e.recurringBillId)
+              .map(e => e.recurringBillId)
+          )
+          const allApplied = rbBills.every(b => appliedIds.has(b.billId))
+          setRecurringStatus({ hasBills: true, alreadyApplied: allApplied, count: rbBills.length })
+        } else {
+          setRecurringStatus({ hasBills: false, alreadyApplied: false, count: 0 })
+        }
+      } catch {
+        setRecurringStatus(null)
+      }
 
       // Merge live totals with bucket metadata
       const bucketMap = {}
@@ -106,6 +129,19 @@ export default function Dashboard({ monthKey, setPage, mode }) {
   if (loading) return <div className="loading">Loading your buckets... 🪣</div>
   if (error) return <div className="error-box">{error}</div>
 
+  async function handleApplyRecurring() {
+    setApplyingBills(true)
+    try {
+      const result = await api.applyRecurringBills(monthKey)
+      setRecurringStatus(prev => ({ ...prev, alreadyApplied: true }))
+      await loadLiveData()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setApplyingBills(false)
+    }
+  }
+
   // ── Live Mode Dashboard ──
   if (isLive) {
     if (!liveData) return null
@@ -137,12 +173,37 @@ export default function Dashboard({ monthKey, setPage, mode }) {
             <div className="empty-icon">⚡</div>
             <h3>No live expenses for {getMonthLabel(monthKey)}</h3>
             <p>Start recording expenses as they happen.</p>
+            {recurringStatus?.hasBills && !recurringStatus?.alreadyApplied && (
+              <button
+                className="recurring-apply-btn"
+                onClick={handleApplyRecurring}
+                disabled={applyingBills}
+              >
+                {applyingBills ? 'Applying...' : `🔁 Apply ${recurringStatus.count} Recurring Bill${recurringStatus.count !== 1 ? 's' : ''}`}
+              </button>
+            )}
             <button className="primary-btn" onClick={() => setPage('live')}>
               Add Expense →
             </button>
           </div>
         ) : (
           <>
+            {/* Recurring bills prompt */}
+            {recurringStatus?.hasBills && !recurringStatus?.alreadyApplied && (
+              <div className="recurring-banner">
+                <span className="recurring-banner-icon">🔁</span>
+                <span className="recurring-banner-text">
+                  You have {recurringStatus.count} recurring bill{recurringStatus.count !== 1 ? 's' : ''} not yet applied to {getMonthLabel(monthKey)}.
+                </span>
+                <button
+                  className="recurring-apply-btn"
+                  onClick={handleApplyRecurring}
+                  disabled={applyingBills}
+                >
+                  {applyingBills ? 'Applying...' : 'Apply Now'}
+                </button>
+              </div>
+            )}
             <div className="bucket-grid">
               {[...liveData.buckets]
                 .filter(b => b.spent > 0)

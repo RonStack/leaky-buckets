@@ -1547,3 +1547,290 @@ body {
   .live-exp-note { display: none; }
   .live-exp-bucket { flex: 1; }
 }
+
+/* ==========================================================
+   Recurring Bills 🔁
+   ========================================================== */
+
+.recurring-page {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.recurring-header h2 {
+  margin: 0 0 4px;
+  font-size: 1.4rem;
+}
+
+.recurring-subtitle {
+  color: var(--muted);
+  margin: 0 0 20px;
+  font-size: 0.9rem;
+}
+
+.recurring-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+
+.recurring-summary-total {
+  color: var(--accent);
+  font-size: 1.05rem;
+}
+
+/* Bill list */
+.recurring-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.recurring-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: border-color 0.2s;
+}
+
+.recurring-item:hover {
+  border-color: var(--accent);
+}
+
+.recurring-item-emoji {
+  font-size: 1.4rem;
+  width: 36px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.recurring-item-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.recurring-item-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recurring-item-bucket {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.recurring-item-amount {
+  font-weight: 700;
+  font-size: 1rem;
+  white-space: nowrap;
+}
+
+.recurring-item-delete {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.recurring-item-delete:hover {
+  background: rgba(239, 83, 80, 0.1);
+  color: var(--red);
+}
+
+/* Add button */
+.recurring-add-btn {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  background: var(--card);
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.recurring-add-btn:hover {
+  border-color: var(--accent);
+  background: rgba(91, 141, 239, 0.05);
+}
+
+/* Add form */
+.recurring-form {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 16px;
+}
+
+.recurring-form h3 {
+  margin: 0 0 16px;
+  font-size: 1.1rem;
+}
+
+.recurring-form label {
+  display: block;
+  margin-bottom: 14px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.recurring-form input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.recurring-form input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+/* Bucket picker in form */
+.recurring-bucket-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.recurring-bucket-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  background: var(--bg);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.recurring-bucket-opt .opt-emoji {
+  font-size: 1.3rem;
+}
+
+.recurring-bucket-opt .opt-name {
+  font-size: 0.75rem;
+  color: var(--text);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.recurring-bucket-opt.selected {
+  border-color: var(--accent);
+  background: rgba(91, 141, 239, 0.1);
+}
+
+.recurring-bucket-opt:hover:not(.selected) {
+  border-color: rgba(91, 141, 239, 0.3);
+}
+
+.recurring-form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.recurring-form-actions .secondary-btn {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 10px 20px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* Dashboard recurring banner */
+.recurring-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(91, 141, 239, 0.08);
+  border: 1px solid rgba(91, 141, 239, 0.2);
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.recurring-banner-icon {
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+.recurring-banner-text {
+  flex: 1;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.recurring-apply-btn {
+  padding: 8px 16px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.2s;
+}
+
+.recurring-apply-btn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.recurring-apply-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---- Responsive Recurring ---- */
+@media (max-width: 640px) {
+  .recurring-bucket-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .recurring-banner {
+    flex-direction: column;
+    text-align: center;
+    gap: 8px;
+  }
+}

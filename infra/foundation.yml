@@ -228,6 +228,29 @@ Resources:
         - Key: App
           Value: leaky-buckets
 
+  RecurringBillsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "lb-recurring-bills-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: !Ref AppKey
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: App
+          Value: leaky-buckets
+
   PaystubsTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -308,3 +331,8 @@ Outputs:
     Value: !Ref LiveExpensesTable
     Export:
       Name: !Sub "lb-${Environment}-live-expenses-table"
+
+  RecurringBillsTableName:
+    Value: !Ref RecurringBillsTable
+    Export:
+      Name: !Sub "lb-${Environment}-recurring-bills-table"
