@@ -3,7 +3,7 @@ import { api } from '../api'
 
 function getCurrentMonthKey() {
   const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
 /** Shift a "YYYY-MM" key by `delta` months (negative = past). */
@@ -34,9 +34,6 @@ export default function Dashboard({ navigate, refreshKey }) {
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-
-  const currentMonthKey = getCurrentMonthKey()
-  const isCurrentMonth = monthKey === currentMonthKey
 
   useEffect(() => {
     let cancelled = false
@@ -84,7 +81,6 @@ export default function Dashboard({ navigate, refreshKey }) {
           <button
             className="month-nav-btn"
             onClick={() => setMonthKey(shiftMonth(monthKey, 1))}
-            disabled={isCurrentMonth}
             aria-label="Next month"
           >
             ›
