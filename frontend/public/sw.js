@@ -1,4 +1,4 @@
-const CACHE_NAME = 'chestcheck-v1'
+const CACHE_NAME = 'chestcheck-v2'
 const PRECACHE_URLS = [
   '/',
   '/index.html',
@@ -22,7 +22,8 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   // Network-first for API calls
-  if (event.request.url.includes('/Prod/') || event.request.url.includes('/health')) {
+  const url = event.request.url.toLowerCase()
+  if (url.includes('/prod/') || url.includes('/health') || url.includes('execute-api')) {
     event.respondWith(fetch(event.request))
     return
   }
