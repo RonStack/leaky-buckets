@@ -3,7 +3,7 @@ import { api } from '../api'
 
 function getCurrentMonthKey() {
   const d = new Date()
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
 /** Shift a "YYYY-MM" key by `delta` months (negative = past). */
@@ -60,7 +60,8 @@ export default function Dashboard({ navigate, refreshKey }) {
 
   if (!summary) return null
 
-  const monthLabel = new Date(monthKey + '-01').toLocaleDateString('en-US', {
+  const [labelYear, labelMonth] = monthKey.split('-').map(Number)
+  const monthLabel = new Date(labelYear, labelMonth - 1, 1).toLocaleDateString('en-US', {
     month: 'long',
     year: 'numeric',
   })
